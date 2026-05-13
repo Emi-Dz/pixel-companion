@@ -1,18 +1,24 @@
 # Upstream Attribution
 
-This project is a Windows port of the original companion concept.
+This project builds on two prior works.
 
-## Base project
+## Original concept
 
 **[sk-ruban/notchi](https://github.com/sk-ruban/notchi)**
 
-The following parts are adapted or inspired from the upstream project:
+The original macOS companion app. The following ideas originate here:
 
 - App concept and interaction model
 - State machine design (working / idle / waiting / sleeping)
 - Hook-based event system
 
-The implementation is a standalone Python/Tkinter application for Windows, not a port of the original macOS Swift/Xcode codebase.
+## Windows port
+
+**[AptatoX/notchi-for-windows](https://github.com/AptatoX/notchi-for-windows)**
+
+Windows adaptation of the original Notchi concept. pixel-companion takes direct inspiration from this port for the Windows-specific implementation approach.
+
+The implementation is a standalone Python/Tkinter application for Windows, not a port of either upstream codebase.
 
 ## Sprite assets
 

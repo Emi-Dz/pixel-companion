@@ -183,7 +183,8 @@ python scripts/generate_windows_media.py
 
 ## Credits
 
-- **[sk-ruban/notchi](https://github.com/sk-ruban/notchi)** — original concept, interaction model, and companion design. This project is a Windows port built on that foundation.
+- **[sk-ruban/notchi](https://github.com/sk-ruban/notchi)** — original macOS concept, interaction model, and companion design
+- **[AptatoX/notchi-for-windows](https://github.com/AptatoX/notchi-for-windows)** — Windows port that directly inspired this project
 - **[Arks](https://arks.itch.io/dino-characters)** — Dino character sprites
 
 See [UPSTREAM.md](UPSTREAM.md) for full attribution notes.
