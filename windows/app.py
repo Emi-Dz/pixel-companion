@@ -1,7 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 import math
+import random
+import shutil
 import socketserver
 import subprocess
 import sys
@@ -16,11 +18,18 @@ from typing import Any
 import tkinter as tk
 from PIL import Image, ImageDraw, ImageTk, ImageFilter, ImageChops
 from tkinter import messagebox
+try:
+    import pygame as _pygame
+    _pygame.mixer.pre_init(frequency=44100, size=-16, channels=2, buffer=512)
+    _pygame.mixer.init()
+    _PYGAME_OK = True
+except Exception:
+    _PYGAME_OK = False
 
 
 APP_HOST = "127.0.0.1"
 APP_PORT = 8765
-APP_MUTEX_NAME = "Local\\NotchiWindowsSingleton"
+APP_MUTEX_NAME = "Local\\MascotaSingleton"
 REFRESH_MS = 500
 ANIMATION_MS = 120
 MAX_EVENTS = 8
@@ -34,6 +43,11 @@ SOB_THRESHOLD = 0.8
 TRANSPARENT_KEY = "#00ff00"
 SESSION_SLEEP_SECONDS = 180
 AUTO_CLOSE_MINUTES_DEFAULT = 5
+BG_SCROLL_SPEED = 3.0
+
+SPRITE_SET_SCALE_DEFAULTS: dict[str, float] = {
+    "Dino": 3.0,
+}
 
 # House customization options — (key, label, rgb)
 GRASS_COLORS: list[tuple[str, str, tuple[int, int, int]]] = [
@@ -144,6 +158,7 @@ class DataStore:
         "opacity": 1.0,
         "break_enabled": True,
         "break_interval_minutes": 50,
+        "break_duration_minutes": 5,
         "last_break_time": 0.0,
         "house": {
             "background": "oficina",
@@ -156,13 +171,20 @@ class DataStore:
         "active_character_id": None,
         "auto_close_enabled": True,
         "auto_close_minutes": AUTO_CLOSE_MINUTES_DEFAULT,
+        "alarms": [],
+        "greeted_date": "",
+        "game_scores": [],
     }
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._data: dict[str, Any] = dict(self._DEFAULTS)
-        self._path = Path.home() / ".notchi" / "notchi_data.json"
+        legacy_path = Path.home() / ".pixel-mascot" / "pixel-mascot_data.json"
+        self._path = Path.home() / ".mascota" / "mascota_data.json"
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        if legacy_path.exists() and not self._path.exists():
+            import shutil as _shutil
+            _shutil.copy(str(legacy_path), str(self._path))
         if self._path.exists():
             try:
                 loaded = json.loads(self._path.read_text(encoding="utf-8"))
@@ -176,7 +198,7 @@ class DataStore:
         if "xp" in self._data and not self._data.get("characters"):
             char: dict[str, Any] = {
                 "id": "char_001",
-                "name": "Notchi",
+                "name": "Mascota",
                 "xp": self._data.pop("xp", 0),
                 "level": self._data.pop("level", 1),
                 "xp_enabled": self._data.pop("xp_enabled", True),
@@ -199,6 +221,24 @@ class DataStore:
             house.pop("mascot_accessories", None)
             house.pop("accessory_config", None)
             self._data["house"] = house
+            self._save()
+        # v3 → v4: add sprite_set to existing characters
+        changed = False
+        for c in self._data.get("characters", []):
+            if "sprite_set" not in c:
+                c["sprite_set"] = "Dino"
+                changed = True
+        if changed:
+            self._save()
+        # v4 → v5: rename old sprite sets; ensure valid sprite_set for all chars
+        changed = False
+        renames = {"neo": "Dino", "pixel": "Dino", "dino": "Dino", "Max Power": "Dino", "Hongui": "Dino"}
+        for c in self._data.get("characters", []):
+            sset = c.get("sprite_set", "Dino")
+            if sset in renames or sset not in ("Dino",):
+                c["sprite_set"] = renames.get(sset, "Dino")
+                changed = True
+        if changed:
             self._save()
 
     def _save(self) -> None:
@@ -237,13 +277,15 @@ class DataStore:
             new_id = f"char_{len(chars) + 1:03d}"
             char: dict[str, Any] = {
                 "id": new_id,
-                "name": name.strip() or "Notchi",
+                "name": name.strip() or "Mascota",
                 "xp": 0,
                 "level": 1,
                 "xp_enabled": True,
                 "tint": "original",
                 "outline": "ninguno",
                 "floating_item": "ninguno",
+                "sprite_set": "Dino",
+                "scale_multiplier": 1.0,
             }
             chars.append(char)
             self._data["characters"] = chars
@@ -268,6 +310,14 @@ class DataStore:
     def set_active_character(self, char_id: str) -> None:
         self.set("active_character_id", char_id)
 
+    def delete_character(self, char_id: str) -> None:
+        with self._lock:
+            chars = [c for c in self._data.get("characters", []) if c.get("id") != char_id]
+            self._data["characters"] = chars
+            if self._data.get("active_character_id") == char_id:
+                self._data["active_character_id"] = chars[0]["id"] if chars else None
+            self._save()
+
     def get_character(self, char_id: str) -> dict[str, Any] | None:
         with self._lock:
             for c in self._data.get("characters", []):
@@ -284,9 +334,26 @@ class DataStore:
                     break
             self._save()
 
+    def add_game_score(self, char_id: str, char_name: str, score: int) -> None:
+        with self._lock:
+            scores: list[dict] = list(self._data.get("game_scores", []))
+            scores.append({
+                "char_id": char_id,
+                "char_name": char_name,
+                "score": score,
+                "date": time.strftime("%Y-%m-%d"),
+            })
+            self._data["game_scores"] = scores
+            self._save()
+
+    def get_top_scores(self, n: int = 3) -> list[dict]:
+        with self._lock:
+            scores: list[dict] = list(self._data.get("game_scores", []))
+        return sorted(scores, key=lambda x: x.get("score", 0), reverse=True)[:n]
+
 
 class XPSystem:
-    XP_PER_LEVEL = 100
+    XP_PER_LEVEL = 300
 
     def __init__(self, store: DataStore) -> None:
         self._store = store
@@ -304,11 +371,15 @@ class XPSystem:
         new_level = new_xp // self.XP_PER_LEVEL + 1
         self._store.update_active_character(char_id=char_id or char.get("id"), xp=new_xp, level=new_level)
         if new_level > old_level and self._level_up_callback is not None:
-            self._level_up_callback(new_level)
+            self._level_up_callback(new_level, char_id or char.get("id"))
 
     def get_level(self) -> int:
         char = self._store.get_active_character()
         return char.get("level", 1) if char else 1
+
+    def max_level(self) -> int:
+        chars = self._store.get_characters()
+        return max((c.get("level", 1) for c in chars), default=1)
 
     def get_xp(self) -> int:
         char = self._store.get_active_character()
@@ -316,7 +387,7 @@ class XPSystem:
 
     def get_name(self) -> str:
         char = self._store.get_active_character()
-        return char.get("name", "Notchi") if char else "Notchi"
+        return char.get("name", "Mascota") if char else "Mascota"
 
     def xp_in_current_level(self) -> int:
         return self.get_xp() % self.XP_PER_LEVEL
@@ -335,7 +406,7 @@ class XPSystem:
         current = char.get("xp", 0) % self.XP_PER_LEVEL
         filled = current * 8 // self.XP_PER_LEVEL
         bar = "█" * filled + "░" * (8 - filled)
-        return f"{name}  Lv.{level}  {bar}  {current}/{self.XP_PER_LEVEL}"
+        return f"{name}  Lv.{level}  {bar}"
 
 
 class BreakSystem:
@@ -351,12 +422,16 @@ class BreakSystem:
         self._store = store
         self._snooze_until: float = 0.0
         self._msg_index = 0
+        self._store.set("last_break_time", time.time())
 
     def is_enabled(self) -> bool:
         return bool(self._store.get("break_enabled"))
 
     def interval_seconds(self) -> float:
         return float(self._store.get("break_interval_minutes")) * 60.0
+
+    def duration_seconds(self) -> float:
+        return float(self._store.get("break_duration_minutes")) * 60.0
 
     def is_due(self) -> bool:
         if not self.is_enabled():
@@ -382,6 +457,77 @@ class BreakSystem:
         return self.MESSAGES[self._msg_index % len(self.MESSAGES)]
 
 
+class AlarmSystem:
+    def __init__(self, store: DataStore) -> None:
+        self._store = store
+
+    def get_alarms(self) -> list[dict]:
+        return list(self._store.get("alarms") or [])
+
+    def add_alarm(self, label: str, time_str: str) -> None:
+        alarms = self.get_alarms()
+        existing_ids = {a["id"] for a in alarms}
+        counter = len(alarms) + 1
+        new_id = f"alarm_{counter:03d}"
+        while new_id in existing_ids:
+            counter += 1
+            new_id = f"alarm_{counter:03d}"
+        alarms.append({
+            "id": new_id,
+            "label": label.strip() or "Recordatorio",
+            "time": time_str,
+            "enabled": True,
+            "triggered_date": "",
+            "snooze_until": 0.0,
+        })
+        self._store.set("alarms", alarms)
+
+    def remove_alarm(self, alarm_id: str) -> None:
+        alarms = [a for a in self.get_alarms() if a["id"] != alarm_id]
+        self._store.set("alarms", alarms)
+
+    def toggle_alarm(self, alarm_id: str) -> None:
+        alarms = self.get_alarms()
+        for a in alarms:
+            if a["id"] == alarm_id:
+                a["enabled"] = not a.get("enabled", True)
+                break
+        self._store.set("alarms", alarms)
+
+    def check_due(self) -> dict | None:
+        today = time.strftime("%Y-%m-%d")
+        now_hm = time.strftime("%H:%M")
+        for a in self.get_alarms():
+            if not a.get("enabled", True):
+                continue
+            if a.get("triggered_date") == today:
+                continue
+            if time.time() < float(a.get("snooze_until", 0.0)):
+                continue
+            if a.get("time", "") <= now_hm:
+                return a
+        return None
+
+    def mark_triggered(self, alarm_id: str) -> None:
+        today = time.strftime("%Y-%m-%d")
+        alarms = self.get_alarms()
+        for a in alarms:
+            if a["id"] == alarm_id:
+                a["triggered_date"] = today
+                a["snooze_until"] = 0.0
+                break
+        self._store.set("alarms", alarms)
+
+    def snooze_alarm(self, alarm_id: str, minutes: int = 10) -> None:
+        alarms = self.get_alarms()
+        for a in alarms:
+            if a["id"] == alarm_id:
+                a["snooze_until"] = time.time() + minutes * 60.0
+                a["triggered_date"] = ""
+                break
+        self._store.set("alarms", alarms)
+
+
 @dataclass
 class SessionData:
     session_id: str
@@ -403,6 +549,8 @@ class SessionData:
     character_id: str | None = None
     needs_character_selection: bool = False
     claude_pid: int = 0
+    agent_type: str = "claude"
+    transcript_path: str = ""
 
     @property
     def project_name(self) -> str:
@@ -510,6 +658,68 @@ class ConversationParser:
             if text and not text.startswith("[Request interrupted"):
                 parts.append(text)
         return "\n".join(parts).strip()
+
+    def parse_incremental_codex(self, session_id: str, transcript_path: str) -> list[str]:
+        if not transcript_path:
+            return []
+        path = Path(transcript_path)
+        if not path.exists():
+            return []
+
+        with self._lock:
+            offset = self._offsets.get(session_id, 0)
+            seen_ids = self._seen_ids.setdefault(session_id, set())
+            file_size = path.stat().st_size
+            if file_size < offset:
+                offset = 0
+                seen_ids.clear()
+            if file_size == offset:
+                return []
+            with path.open("r", encoding="utf-8", errors="ignore") as handle:
+                handle.seek(offset)
+                chunk = handle.read()
+            self._offsets[session_id] = file_size
+
+        messages: list[str] = []
+        for line in chunk.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            # Codex uses OpenAI conversation format: {"role": "assistant", ...}
+            if payload.get("role") != "assistant":
+                continue
+
+            message_id = payload.get("id") or payload.get("turn_id")
+            if message_id and message_id in seen_ids:
+                continue
+
+            content = payload.get("content")
+            text = self._extract_text(content)
+            if not text:
+                continue
+
+            if message_id:
+                seen_ids.add(message_id)
+            messages.append(text)
+
+        return messages
+
+    def mark_current_position_from_path(self, session_id: str, transcript_path: str) -> None:
+        if not transcript_path:
+            return
+        path = Path(transcript_path)
+        with self._lock:
+            if not path.exists():
+                self._offsets[session_id] = 0
+                self._seen_ids[session_id] = set()
+                return
+            self._offsets[session_id] = path.stat().st_size
+            self._seen_ids[session_id] = set()
 
     @staticmethod
     def session_file_path(session_id: str, cwd: str) -> Path:
@@ -638,6 +848,11 @@ class SessionStore:
             pid = int(payload.get("claude_pid") or 0)
             if pid:
                 session.claude_pid = pid
+            agent_type = payload.get("agent_type", "claude")
+            session.agent_type = agent_type
+            transcript_path = payload.get("transcript_path") or ""
+            if transcript_path:
+                session.transcript_path = transcript_path
 
             if event_name == "UserPromptSubmit":
                 prompt = (payload.get("user_prompt") or "").strip()
@@ -647,7 +862,10 @@ class SessionStore:
                 session.messages = []
                 session.state = "working"
                 session.current_tool = ""
-                self._parser.mark_current_position(session_id, session.cwd)
+                if agent_type == "codex":
+                    self._parser.mark_current_position_from_path(session_id, session.transcript_path)
+                else:
+                    self._parser.mark_current_position(session_id, session.cwd)
             elif event_name == "PreToolUse":
                 session.state = "working"
                 session.current_tool = tool
@@ -655,24 +873,34 @@ class SessionStore:
                 session.state = "waiting"
                 session.current_tool = tool
             elif event_name == "PreCompact":
-                session.state = "compacting"
+                if agent_type != "codex":
+                    session.state = "compacting"
             elif event_name in {"PostToolUse", "Stop", "SubagentStop"}:
                 if event_name in {"Stop", "SubagentStop"} or status == "waiting_for_input":
                     session.state = "idle"
                     session.current_tool = ""
                     if event_name in {"Stop", "SubagentStop"} and self._xp_system is not None:
-                        self._xp_system.add_xp(10, char_id=session.character_id)
-                new_messages = self._parser.parse_incremental(session_id, session.cwd)
+                        self._xp_system.add_xp(3, char_id=session.character_id)
+                elif session.state == "waiting":
+                    session.state = "working"
+                    session.current_tool = ""
+                if agent_type == "codex":
+                    new_messages = self._parser.parse_incremental_codex(session_id, session.transcript_path)
+                    if event_name == "PostToolUse" and self._xp_system is not None:
+                        self._xp_system.add_xp(3, char_id=session.character_id)
+                else:
+                    new_messages = self._parser.parse_incremental(session_id, session.cwd)
             elif event_name == "SessionStart":
                 session.state = "working" if status != "waiting_for_input" else "idle"
             elif event_name == "SessionEnd":
-                if self._xp_system is not None:
-                    self._xp_system.add_xp(5, char_id=session.character_id)
-                self._sessions.pop(session_id, None)
-                self._parser.reset(session_id)
-                if self._selected_session_id == session_id:
-                    self._selected_session_id = next(iter(self._sessions), None)
-                return
+                if agent_type != "codex":
+                    if self._xp_system is not None:
+                        self._xp_system.add_xp(2, char_id=session.character_id)
+                    self._sessions.pop(session_id, None)
+                    self._parser.reset(session_id)
+                    if self._selected_session_id == session_id:
+                        self._selected_session_id = next(iter(self._sessions), None)
+                    return
             elif status == "waiting_for_input":
                 session.state = "idle"
 
@@ -714,6 +942,13 @@ class SessionStore:
             if session:
                 session.character_id = char_id
                 session.needs_character_selection = False
+
+    def unassign_character_by_id(self, char_id: str) -> None:
+        with self._lock:
+            for session in self._sessions.values():
+                if session.character_id == char_id:
+                    session.character_id = None
+                    session.needs_character_selection = True
 
     def remove_session(self, session_id: str) -> None:
         with self._lock:
@@ -808,16 +1043,16 @@ class HookInstaller:
         self.claude_dir = Path.home() / ".claude"
         self.hooks_dir = self.claude_dir / "hooks"
         self.settings_path = self.claude_dir / "settings.json"
-        self.installed_hook = self.hooks_dir / "notchi-hook.ps1"
+        self.installed_hook = self.hooks_dir / "mascota-hook.ps1"
 
     def install(self) -> tuple[bool, str]:
         if not self.claude_dir.exists():
             return False, f"Claude config directory not found: {self.claude_dir}"
 
         self.hooks_dir.mkdir(parents=True, exist_ok=True)
-        hook_source = self.app_dir / "notchi-hook.ps1"
+        hook_source = self.app_dir / "mascota-hook.ps1"
         hook_text = hook_source.read_text(encoding="utf-8")
-        hook_text = hook_text.replace("__NOTCHI_APP_DIR__", str(self.app_dir))
+        hook_text = hook_text.replace("__MASCOTA_APP_DIR__", str(self.app_dir))
         self.installed_hook.write_text(hook_text, encoding="utf-8")
 
         data: dict[str, Any] = {}
@@ -848,7 +1083,7 @@ class HookInstaller:
 
         for event_name, config in config_by_event.items():
             existing = hooks.get(event_name, [])
-            if not any(self._contains_notchi_hook(item) for item in existing):
+            if not any(self._contains_mascota_hook(item) for item in existing):
                 existing.extend(config)
             hooks[event_name] = existing
 
@@ -865,16 +1100,90 @@ class HookInstaller:
             return False
         hooks = data.get("hooks", {})
         return any(
-            self._contains_notchi_hook(item)
+            self._contains_mascota_hook(item)
             for event_entries in hooks.values()
             for item in event_entries
         )
 
     @staticmethod
-    def _contains_notchi_hook(entry: dict[str, Any]) -> bool:
+    def _contains_mascota_hook(entry: dict[str, Any]) -> bool:
         for hook in entry.get("hooks", []):
             command = hook.get("command", "")
-            if "notchi-hook.ps1" in command:
+            if "mascota-hook.ps1" in command:
+                return True
+        return False
+
+
+class CodexHookInstaller:
+    def __init__(self, app_dir: Path) -> None:
+        self.app_dir = app_dir
+        self.codex_dir = Path.home() / ".codex"
+        self.hooks_path = self.codex_dir / "hooks.json"
+        self.installed_hook = self.codex_dir / "mascota-codex-hook.ps1"
+
+    def install(self) -> tuple[bool, str]:
+        if not self.codex_dir.exists():
+            return False, f"Codex config directory not found: {self.codex_dir}"
+
+        hook_source = self.app_dir / "codex-hook.ps1"
+        if not hook_source.exists():
+            return False, f"Hook source not found: {hook_source}"
+
+        hook_text = hook_source.read_text(encoding="utf-8")
+        hook_text = hook_text.replace("__MASCOTA_APP_DIR__", str(self.app_dir))
+        self.installed_hook.write_text(hook_text, encoding="utf-8")
+
+        data: dict[str, Any] = {}
+        if self.hooks_path.exists():
+            try:
+                data = json.loads(self.hooks_path.read_text(encoding="utf-8"))
+            except json.JSONDecodeError:
+                data = {}
+
+        hooks = data.get("hooks", {})
+        command = f'powershell -NoProfile -ExecutionPolicy Bypass -File "{self.installed_hook}"'
+        entry = [{"type": "command", "command": command}]
+        with_matcher = [{"matcher": "*", "hooks": entry}]
+        without_matcher = [{"hooks": entry}]
+
+        config_by_event = {
+            "UserPromptSubmit": without_matcher,
+            "SessionStart": without_matcher,
+            "PreToolUse": with_matcher,
+            "PostToolUse": with_matcher,
+            "PermissionRequest": with_matcher,
+            "Stop": without_matcher,
+        }
+
+        for event_name, config in config_by_event.items():
+            existing = hooks.get(event_name, [])
+            if not any(self._contains_mascota_hook(item) for item in existing):
+                existing.extend(config)
+            hooks[event_name] = existing
+
+        data["hooks"] = hooks
+        self.hooks_path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+        return True, f"Installed Codex hook into {self.installed_hook}"
+
+    def is_installed(self) -> bool:
+        if not self.hooks_path.exists():
+            return False
+        try:
+            data = json.loads(self.hooks_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            return False
+        hooks = data.get("hooks", {})
+        return any(
+            self._contains_mascota_hook(item)
+            for event_entries in hooks.values()
+            for item in event_entries
+        )
+
+    @staticmethod
+    def _contains_mascota_hook(entry: dict[str, Any]) -> bool:
+        for hook in entry.get("hooks", []):
+            command = hook.get("command", "")
+            if "mascota-codex-hook.ps1" in command:
                 return True
         return False
 
@@ -882,39 +1191,73 @@ class HookInstaller:
 class SpriteRenderer:
     def __init__(self, assets_dir: Path) -> None:
         self.assets_dir = assets_dir
-        self._cache: dict[tuple[str, int, int], ImageTk.PhotoImage] = {}
-        self._grass_cache: dict[int, ImageTk.PhotoImage] = {}
+        self._cache: dict[tuple, ImageTk.PhotoImage] = {}
+        self._frame_count_cache: dict[tuple, int] = {}
+
+    def invalidate(self) -> None:
+        self._cache.clear()
+        self._frame_count_cache.clear()
+
+    def available_sets(self) -> list[str]:
+        sets = []
+        for item in sorted(self.assets_dir.iterdir()):
+            if item.is_dir() and (item / "idle_neutral.imageset" / "sprite_sheet.png").exists():
+                sets.append(item.name)
+        return sets or ["Dino"]
+
+    def _frame_count_for(self, sprite_set: str, state: str, emotion: str) -> int:
+        """Auto-detect frame count from spritesheet width. Prefers 6, falls back to 5."""
+        key = (sprite_set, state, emotion)
+        if key in self._frame_count_cache:
+            return self._frame_count_cache[key]
+        if state == "compacting":
+            count = 5
+        else:
+            sprite_dir = self.assets_dir / sprite_set
+            sprite_name = self._sprite_name_for(state, emotion, sprite_dir)
+            path = sprite_dir / f"{sprite_name}.imageset" / "sprite_sheet.png"
+            count = 6
+            try:
+                with Image.open(path) as img:
+                    w = img.width
+                if w % 6 == 0:
+                    count = 6
+                elif w % 5 == 0:
+                    count = 5
+            except Exception:
+                pass
+        self._frame_count_cache[key] = count
+        return count
 
     def get_frame(self, state: str, emotion: str, frame_index: int, scale: float = 2.0,
                   tint: tuple[int, int, int] | None = None,
-                  outline_rgb: tuple[int, int, int] | None = None) -> ImageTk.PhotoImage:
-        frame_count = 5 if state == "compacting" else 6
+                  outline_rgb: tuple[int, int, int] | None = None,
+                  sprite_set: str = "Dino") -> ImageTk.PhotoImage:
+        frame_count = self._frame_count_for(sprite_set, state, emotion)
         normalized = frame_index % frame_count
         scale_key = int(scale * 100)
-        cache_key = (f"{state}:{emotion}", normalized, scale_key, tint, outline_rgb)
+        cache_key = (sprite_set, f"{state}:{emotion}", normalized, scale_key, tint, outline_rgb)
         if cache_key not in self._cache:
-            image = self._load_frame_image(state, emotion, normalized, scale, tint, outline_rgb)
+            image = self._load_frame_image(state, emotion, normalized, scale, tint, outline_rgb, sprite_set)
             self._cache[cache_key] = ImageTk.PhotoImage(image)
         return self._cache[cache_key]
 
-    def get_grass(self, scale: float = 1.0) -> ImageTk.PhotoImage:
-        scale_key = int(scale * 100)
-        if scale_key not in self._grass_cache:
-            path = self.assets_dir / "GrassIsland.imageset" / "grass.png"
-            image = Image.open(path).convert("RGBA")
-            width = max(96, int(172 * scale))
-            height = max(40, int(70 * scale))
-            image = image.resize((width, height), Image.Resampling.NEAREST)
-            self._grass_cache[scale_key] = ImageTk.PhotoImage(image)
-        return self._grass_cache[scale_key]
-
     def _load_frame_image(self, state: str, emotion: str, frame_index: int, scale: float,
                           tint: tuple[int, int, int] | None = None,
-                          outline_rgb: tuple[int, int, int] | None = None) -> Image.Image:
-        columns = 5 if state == "compacting" else 6
-        sprite_name = self._sprite_name_for(state, emotion)
-        path = self.assets_dir / f"{sprite_name}.imageset" / "sprite_sheet.png"
+                          outline_rgb: tuple[int, int, int] | None = None,
+                          sprite_set: str = "Dino") -> Image.Image:
+        sprite_dir = self.assets_dir / sprite_set
+        sprite_name = self._sprite_name_for(state, emotion, sprite_dir)
+        path = sprite_dir / f"{sprite_name}.imageset" / "sprite_sheet.png"
         sheet = Image.open(path).convert("RGBA")
+        if state == "compacting":
+            columns = 5
+        elif sheet.width % 6 == 0:
+            columns = 6
+        elif sheet.width % 5 == 0:
+            columns = 5
+        else:
+            columns = 6
         frame_width = sheet.width // columns
         frame = sheet.crop((frame_index * frame_width, 0, (frame_index + 1) * frame_width, sheet.height))
         alpha_box = frame.getchannel("A").getbbox()
@@ -927,8 +1270,8 @@ class SpriteRenderer:
                 min(frame.width, right + padding),
                 min(frame.height, bottom + padding),
             ))
-        scaled_width = max(48, int(frame.width * scale))
-        scaled_height = max(48, int(frame.height * scale))
+        scaled_width = max(4, int(frame.width * scale))
+        scaled_height = max(4, int(frame.height * scale))
         frame = frame.resize((scaled_width, scaled_height), Image.Resampling.NEAREST)
         if tint is not None:
             frame = SpriteRenderer._apply_tint_hsv(frame, tint)
@@ -964,20 +1307,21 @@ class SpriteRenderer:
         outline_layer.putalpha(outline_mask)
         return Image.alpha_composite(outline_layer, frame)
 
-    def _sprite_name_for(self, state: str, emotion: str) -> str:
+    def _sprite_name_for(self, state: str, emotion: str, sprite_dir: Path | None = None) -> str:
+        base = sprite_dir or (self.assets_dir / "Dino")
         requested = f"{state}_{emotion}"
         fallback_order = [requested]
         if emotion == "sob":
             fallback_order.append(f"{state}_sad")
         fallback_order.append(f"{state}_neutral")
-        # States without dedicated sprites (e.g. resting) fall back to sleeping
+        # States without dedicated sprites fall back to sleeping
         if state not in {"idle", "working", "waiting", "compacting", "sleeping"}:
             fallback_order.append(f"sleeping_{emotion}")
             fallback_order.append("sleeping_neutral")
             fallback_order.append("idle_neutral")
 
         for name in fallback_order:
-            if (self.assets_dir / f"{name}.imageset" / "sprite_sheet.png").exists():
+            if (base / f"{name}.imageset" / "sprite_sheet.png").exists():
                 return name
         return "idle_neutral"
 
@@ -989,11 +1333,18 @@ class BackgroundRenderer:
 
     def draw(self, canvas: tk.Canvas, width: int, height: int,
              theme: str = "oficina",
-             ground_color: tuple[int, int, int] | None = None) -> None:
+             ground_color: tuple[int, int, int] | None = None,
+             x_offset: int = 0) -> None:
         key = (width, height, theme, ground_color)
         if key not in self._cache:
             self._cache[key] = self._build(width, height, theme, ground_color)
-        canvas.create_image(0, 0, image=self._cache[key], anchor="nw")
+        img = self._cache[key]
+        off = x_offset % width
+        if off == 0:
+            canvas.create_image(0, 0, image=img, anchor="nw")
+        else:
+            canvas.create_image(-off, 0, image=img, anchor="nw")
+            canvas.create_image(-off + width, 0, image=img, anchor="nw")
 
     def invalidate(self) -> None:
         self._cache.clear()
@@ -1029,23 +1380,27 @@ class BackgroundRenderer:
         d.rectangle([0, floor_y - 5, width, floor_y - 1], fill=(158, 145, 128, 255))
         d.rectangle([0, floor_y, width, height], fill=(*gc, 255))
         d.rectangle([0, floor_y, width, floor_y + 2], fill=(*_lighten(gc), 255))
-        wx, wy = int(width * 0.06), int(height * 0.07)
-        ww, wh = int(width * 0.26), int(height * 0.40)
-        d.rectangle([wx, wy, wx + ww, wy + wh], fill=(178, 218, 238, 255))
-        d.rectangle([wx, wy, wx + ww, wy + wh], outline=(110, 90, 72, 255), width=2)
-        mx, my = wx + ww // 2, wy + wh // 2
-        d.rectangle([mx - 1, wy + 2, mx + 1, wy + wh - 2], fill=(110, 90, 72, 255))
-        d.rectangle([wx + 2, my - 1, wx + ww - 2, my + 1], fill=(110, 90, 72, 255))
-        sx = int(width * 0.78)
-        sw = int(width * 0.18)
+        wy = int(height * 0.07)
+        ww, wh = int(width * 0.22), int(height * 0.40)
         sh = int(height * 0.42)
-        d.rectangle([sx, wy, sx + sw, wy + sh], fill=(158, 130, 100, 255))
-        d.rectangle([sx, wy, sx + sw, wy + sh], outline=(110, 90, 72, 255), width=1)
+        sw = int(width * 0.14)
         book_colors = [(180, 80, 60), (80, 130, 180), (90, 160, 90), (200, 170, 60)]
         bw = sw // len(book_colors) - 1
-        for i, color in enumerate(book_colors):
-            bx = sx + 2 + i * (bw + 1)
-            d.rectangle([bx, wy + 4, bx + bw, wy + sh // 2 - 2], fill=(*color, 255))
+        # Draw window+shelf pairs every half-width, tiled at -width/0/+width offsets
+        for base in [int(width * 0.00), int(width * 0.50)]:
+            for ox in [-width, 0, width]:
+                wx = base + int(width * 0.08) + ox
+                d.rectangle([wx, wy, wx + ww, wy + wh], fill=(178, 218, 238, 255))
+                d.rectangle([wx, wy, wx + ww, wy + wh], outline=(110, 90, 72, 255), width=2)
+                mx, my = wx + ww // 2, wy + wh // 2
+                d.rectangle([mx - 1, wy + 2, mx + 1, wy + wh - 2], fill=(110, 90, 72, 255))
+                d.rectangle([wx + 2, my - 1, wx + ww - 2, my + 1], fill=(110, 90, 72, 255))
+                sx = base + int(width * 0.36) + ox
+                d.rectangle([sx, wy, sx + sw, wy + sh], fill=(158, 130, 100, 255))
+                d.rectangle([sx, wy, sx + sw, wy + sh], outline=(110, 90, 72, 255), width=1)
+                for i, color in enumerate(book_colors):
+                    bx = sx + 2 + i * (bw + 1)
+                    d.rectangle([bx, wy + 4, bx + bw, wy + sh // 2 - 2], fill=(*color, 255))
         return img
 
     @staticmethod
@@ -1057,16 +1412,17 @@ class BackgroundRenderer:
         floor_y = int(height * 0.62)
         d.rectangle([0, 0, width, floor_y], fill=(168, 210, 238, 255))
         d.rectangle([0, floor_y, width, height], fill=(*gc, 255))
-        tree_positions = [0.08, 0.22, 0.72, 0.88]
-        for xr in tree_positions:
-            tx = int(width * xr)
-            th = int(height * 0.48)
-            tw = int(width * 0.07)
-            d.polygon([tx, floor_y - th, tx - tw, floor_y - th // 3, tx + tw, floor_y - th // 3],
-                      fill=(48, 90, 48, 255))
-            d.polygon([tx, floor_y - int(th * 0.72), tx - int(tw * 1.2), floor_y - int(th * 0.22),
-                       tx + int(tw * 1.2), floor_y - int(th * 0.22)], fill=(60, 110, 60, 255))
-            d.rectangle([tx - 2, floor_y - int(th * 0.22), tx + 2, floor_y], fill=(90, 60, 40, 255))
+        th = int(height * 0.48)
+        tw = int(width * 0.07)
+        # Trees evenly spaced every 25%, tiled at -width/0/+width
+        for xr in [0.12, 0.37, 0.62, 0.87]:
+            for ox in [-width, 0, width]:
+                tx = int(width * xr) + ox
+                d.polygon([tx, floor_y - th, tx - tw, floor_y - th // 3, tx + tw, floor_y - th // 3],
+                          fill=(48, 90, 48, 255))
+                d.polygon([tx, floor_y - int(th * 0.72), tx - int(tw * 1.2), floor_y - int(th * 0.22),
+                           tx + int(tw * 1.2), floor_y - int(th * 0.22)], fill=(60, 110, 60, 255))
+                d.rectangle([tx - 2, floor_y - int(th * 0.22), tx + 2, floor_y], fill=(90, 60, 40, 255))
         return img
 
     @staticmethod
@@ -1079,16 +1435,21 @@ class BackgroundRenderer:
         floor_y = int(height * 0.62)
         d.rectangle([0, 0, width, floor_y], fill=(18, 22, 50, 255))
         d.rectangle([0, floor_y, width, height], fill=(*gc, 255))
+        # Stars seeded across the full width (seamless: random within width)
         rng = random.Random(42)
         for _ in range(55):
-            sx = rng.randint(0, width)
+            sx = rng.randint(0, width - 1)
             sy = rng.randint(0, floor_y - 4)
             br = rng.randint(140, 255)
             d.ellipse([sx - 1, sy - 1, sx + 1, sy + 1], fill=(br, br, br, 255))
-        mx, my, mr = int(width * 0.82), int(height * 0.14), int(height * 0.10)
-        d.ellipse([mx - mr, my - mr, mx + mr, my + mr], fill=(240, 238, 210, 255))
-        d.ellipse([mx + mr // 3, my - mr, mx + mr + mr // 2, my + mr // 2],
-                  fill=(18, 22, 50, 255))
+        # Moon centered at 30%, tiled so it wraps seamlessly
+        mr = int(height * 0.10)
+        my = int(height * 0.14)
+        for ox in [-width, 0, width]:
+            mx = int(width * 0.30) + ox
+            d.ellipse([mx - mr, my - mr, mx + mr, my + mr], fill=(240, 238, 210, 255))
+            d.ellipse([mx + mr // 3, my - mr, mx + mr + mr // 2, my + mr // 2],
+                      fill=(18, 22, 50, 255))
         return img
 
     @staticmethod
@@ -1103,11 +1464,13 @@ class BackgroundRenderer:
         d.rectangle([0, horizon, width, floor_y], fill=(68, 140, 192, 255))
         d.rectangle([0, floor_y, width, height], fill=(*gc, 255))
         d.line([0, horizon, width, horizon], fill=(90, 160, 210, 255), width=1)
-        sx, sy, sr = int(width * 0.18), int(height * 0.12), int(height * 0.09)
-        d.ellipse([sx - sr, sy - sr, sx + sr, sy + sr], fill=(255, 220, 60, 255))
+        # Sun at 25% tiled so it wraps seamlessly
+        sy_pos, sr = int(height * 0.12), int(height * 0.09)
+        for ox in [-width, 0, width]:
+            sx = int(width * 0.25) + ox
+            d.ellipse([sx - sr, sy_pos - sr, sx + sr, sy_pos + sr], fill=(255, 220, 60, 255))
         return img
 
-    @staticmethod
     @staticmethod
     def _build_montanas(width: int, height: int,
                         ground_color: tuple[int, int, int] | None = None) -> Image.Image:
@@ -1124,46 +1487,52 @@ class BackgroundRenderer:
             b = int(sky_top[2] + (sky_bot[2] - sky_top[2]) * t)
             d.line([(0, y), (width, y)], fill=(r, g, b, 255))
         floor_y = int(height * 0.68)
-        # Far mountains (grey-blue, snowy)
         rng = random.Random(42)
-        for i in range(5):
-            mx = int(width * (0.05 + i * 0.22))
-            mh = int(height * (0.32 + rng.random() * 0.18))
-            mw = int(width * (0.14 + rng.random() * 0.10))
-            pts = [mx - mw, floor_y, mx, floor_y - mh, mx + mw, floor_y]
-            d.polygon(pts, fill=(155, 170, 195, 255))
-            # Snow cap
-            snow_h = int(mh * 0.30)
-            sp = [mx - mw * snow_h // mh, floor_y - mh + snow_h,
-                  mx, floor_y - mh,
-                  mx + mw * snow_h // mh, floor_y - mh + snow_h]
-            d.polygon(sp, fill=(240, 245, 255, 255))
-        # Near mountains (darker)
-        for i in range(3):
-            mx = int(width * (0.12 + i * 0.34))
-            mh = int(height * (0.28 + rng.random() * 0.14))
-            mw = int(width * (0.18 + rng.random() * 0.08))
-            pts = [mx - mw, floor_y, mx, floor_y - mh, mx + mw, floor_y]
-            d.polygon(pts, fill=(110, 130, 155, 255))
-            snow_h = int(mh * 0.28)
-            sp = [mx - mw * snow_h // mh, floor_y - mh + snow_h,
-                  mx, floor_y - mh,
-                  mx + mw * snow_h // mh, floor_y - mh + snow_h]
-            d.polygon(sp, fill=(235, 242, 255, 255))
-        # Ground / snow floor
+
+        def draw_mountain(cx: int, mh: int, mw: int, fill: tuple, snow_fill: tuple, snow_frac: float) -> None:
+            for ox in [-width, 0, width]:
+                mx = cx + ox
+                pts = [mx - mw, floor_y, mx, floor_y - mh, mx + mw, floor_y]
+                d.polygon(pts, fill=fill)
+                snow_h = int(mh * snow_frac)
+                if snow_h > 0 and mh > 0:
+                    sp = [mx - mw * snow_h // mh, floor_y - mh + snow_h,
+                          mx, floor_y - mh,
+                          mx + mw * snow_h // mh, floor_y - mh + snow_h]
+                    d.polygon(sp, fill=snow_fill)
+
+        # Far mountains evenly spaced every 20%
+        far_params = [(int(width * (0.10 + i * 0.20)),
+                       int(height * (0.32 + rng.random() * 0.18)),
+                       int(width * (0.12 + rng.random() * 0.08))) for i in range(5)]
+        for mx, mh, mw in far_params:
+            draw_mountain(mx, mh, mw, (155, 170, 195, 255), (240, 245, 255, 255), 0.30)
+
+        # Near mountains evenly spaced every 33%
+        near_params = [(int(width * (0.17 + i * 0.33)),
+                        int(height * (0.28 + rng.random() * 0.14)),
+                        int(width * (0.16 + rng.random() * 0.07))) for i in range(3)]
+        for mx, mh, mw in near_params:
+            draw_mountain(mx, mh, mw, (110, 130, 155, 255), (235, 242, 255, 255), 0.28)
+
         d.rectangle([0, floor_y, width, height], fill=(*gc, 255))
-        # Snow texture bumps
+
+        # Snow bumps evenly distributed (8 per tile, tiled)
+        bump_w = int(width * 0.14)
         for i in range(8):
-            bx = int(width * (i / 8 + rng.random() * 0.08))
-            d.ellipse([bx, floor_y - 3, bx + int(width * 0.14), floor_y + 6],
-                      fill=(230, 238, 248, 200))
-        # Small pine trees silhouettes
-        for i in range(4):
-            tx = int(width * (0.06 + i * 0.26 + rng.random() * 0.10))
-            th = int(height * 0.16)
-            tw = int(th * 0.55)
-            d.polygon([tx, floor_y - th, tx - tw, floor_y, tx + tw, floor_y],
-                      fill=(55, 80, 70, 220))
+            bx = int(width * (i / 8))
+            for ox in [-width, 0, width]:
+                d.ellipse([bx + ox, floor_y - 3, bx + ox + bump_w, floor_y + 6],
+                          fill=(230, 238, 248, 200))
+
+        # Pine trees every 25%, tiled
+        th = int(height * 0.16)
+        tw = int(th * 0.55)
+        for xr in [0.10, 0.35, 0.60, 0.85]:
+            for ox in [-width, 0, width]:
+                tx = int(width * xr) + ox
+                d.polygon([tx, floor_y - th, tx - tw, floor_y, tx + tw, floor_y],
+                          fill=(55, 80, 70, 220))
         return img
 
     @staticmethod
@@ -1176,16 +1545,19 @@ class BackgroundRenderer:
         d.rectangle([0, 0, width, height], fill=(*gc, 255))
         rng = random.Random(7)
         for _ in range(90):
-            sx = rng.randint(0, width)
-            sy = rng.randint(0, height)
+            sx = rng.randint(0, width - 1)
+            sy = rng.randint(0, height - 1)
             br = rng.randint(120, 255)
             col = rng.choice([(br, br, br), (br, br - 20, br + 20), (br + 10, br, br - 20)])
             d.point([sx, sy], fill=(*col, 255))
-        px, py, pr = int(width * 0.76), int(height * 0.28), int(height * 0.18)
-        d.ellipse([px - pr, py - pr, px + pr, py + pr], fill=(80, 60, 140, 220))
+        # Planet at 30% tiled so it wraps seamlessly
+        py_pos, pr = int(height * 0.28), int(height * 0.18)
         rw = int(pr * 1.7)
-        d.ellipse([px - rw, py - int(pr * 0.22), px + rw, py + int(pr * 0.22)],
-                  outline=(140, 110, 200, 160), width=2)
+        for ox in [-width, 0, width]:
+            px = int(width * 0.30) + ox
+            d.ellipse([px - pr, py_pos - pr, px + pr, py_pos + pr], fill=(80, 60, 140, 220))
+            d.ellipse([px - rw, py_pos - int(pr * 0.22), px + rw, py_pos + int(pr * 0.22)],
+                      outline=(140, 110, 200, 160), width=2)
         return img
 
 class DecorationRenderer:
@@ -1718,7 +2090,632 @@ class EventHandler(socketserver.BaseRequestHandler):
         self.server.app.store.process(payload)
 
 
-class NotchiWindowsApp:
+class BreakOverlayWindow:
+    @staticmethod
+    def _get_all_monitors() -> list[tuple[int, int, int, int]]:
+        class _RECT(ctypes.Structure):
+            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+        monitors: list[tuple[int, int, int, int]] = []
+        _EnumProc = ctypes.WINFUNCTYPE(
+            ctypes.c_bool, ctypes.c_ulong, ctypes.c_ulong,
+            ctypes.POINTER(_RECT), ctypes.c_double,
+        )
+        def _cb(hmonitor, hdc, lprect, lparam):
+            r = lprect.contents
+            monitors.append((r.left, r.top, r.right - r.left, r.bottom - r.top))
+            return True
+        ctypes.windll.user32.EnumDisplayMonitors(None, None, _EnumProc(_cb), 0)
+        if not monitors:
+            w = ctypes.windll.user32.GetSystemMetrics(0)
+            h = ctypes.windll.user32.GetSystemMetrics(1)
+            monitors = [(0, 0, w, h)]
+        monitors.sort(key=lambda m: (0 if (m[0] == 0 and m[1] == 0) else 1, m[0], m[1]))
+        return monitors
+
+    def __init__(self, root: tk.Tk, duration_seconds: int,
+                 on_complete: Any, on_cancel: Any) -> None:
+        monitors = self._get_all_monitors()
+        mx, my, mw, mh = monitors[0]
+
+        self._win = tk.Toplevel(root)
+        self._win.attributes("-topmost", True)
+        self._win.overrideredirect(True)
+        self._win.geometry(f"{mw}x{mh}+{mx}+{my}")
+        self._win.configure(bg="#060b14")
+        self._remaining = duration_seconds
+        self._total = duration_seconds
+        self._on_complete = on_complete
+        self._on_cancel = on_cancel
+        self._finished = False
+        self._after_id: str | None = None
+        self._canvas = tk.Canvas(self._win, bg="#060b14", highlightthickness=0)
+        self._canvas.pack(fill="both", expand=True)
+
+        self._secondary_wins: list[tk.Toplevel] = []
+        for sx, sy, sw, sh in monitors[1:]:
+            sec = tk.Toplevel(root)
+            sec.attributes("-topmost", True)
+            sec.overrideredirect(True)
+            sec.geometry(f"{sw}x{sh}+{sx}+{sy}")
+            sec.configure(bg="#060b14")
+            sc = tk.Canvas(sec, bg="#060b14", highlightthickness=0)
+            sc.pack(fill="both", expand=True)
+            sec.update_idletasks()
+            sc.create_text(sw // 2, sh // 2,
+                           text="Tiempo de descanso",
+                           fill="#334155", font=("Microsoft YaHei UI", 24),
+                           anchor="center")
+            self._secondary_wins.append(sec)
+
+        self._win.update_idletasks()
+        self._draw()
+        self._after_id = self._win.after(1000, self._tick)
+
+    def _format_time(self, secs: int) -> str:
+        m, s = divmod(max(0, secs), 60)
+        return f"{m:02d}:{s:02d}"
+
+    def _draw(self) -> None:
+        c = self._canvas
+        c.delete("all")
+        w = c.winfo_width() or c.winfo_screenwidth()
+        h = c.winfo_height() or c.winfo_screenheight()
+        c.create_rectangle(0, 0, w, h, fill="#060b14", outline="")
+
+        if not self._finished:
+            c.create_text(w // 2, h // 2 - 90,
+                          text="Tiempo de descanso",
+                          fill="#94a3b8", font=("Microsoft YaHei UI", 24),
+                          anchor="center")
+            c.create_text(w // 2, h // 2,
+                          text=self._format_time(self._remaining),
+                          fill="#f8fafc", font=("Microsoft YaHei UI", 72, "bold"),
+                          anchor="center")
+            bw, bh = 300, 46
+            bx1 = w // 2 - bw // 2
+            bx2 = w // 2 + bw // 2
+            by1 = h // 2 + 90
+            by2 = by1 + bh
+            c.create_rectangle(bx1, by1, bx2, by2,
+                                fill="#1e293b", outline="#334155", width=1,
+                                tags="cancel_area")
+            c.create_text(w // 2, (by1 + by2) // 2,
+                          text="Cancelar descanso (emergencia)",
+                          fill="#94a3b8", font=("Microsoft YaHei UI", 11),
+                          tags="cancel_area", anchor="center")
+            c.tag_bind("cancel_area", "<Button-1>", lambda _e: self._cancel())
+        else:
+            c.create_text(w // 2, h // 2 - 60,
+                          text="¡Descansaste!",
+                          fill="#34d399", font=("Microsoft YaHei UI", 40, "bold"),
+                          anchor="center")
+            c.create_text(w // 2, h // 2 + 10,
+                          text="Es hora de volver al trabajo.",
+                          fill="#94a3b8", font=("Microsoft YaHei UI", 18),
+                          anchor="center")
+            bw, bh = 180, 50
+            bx1 = w // 2 - bw // 2
+            bx2 = w // 2 + bw // 2
+            by1 = h // 2 + 80
+            by2 = by1 + bh
+            c.create_rectangle(bx1, by1, bx2, by2,
+                                fill="#064e3b", outline="#34d399", width=2,
+                                tags="accept_area")
+            c.create_text(w // 2, (by1 + by2) // 2,
+                          text="Aceptar",
+                          fill="#6ee7b7", font=("Microsoft YaHei UI", 14, "bold"),
+                          tags="accept_area", anchor="center")
+            c.tag_bind("accept_area", "<Button-1>", lambda _e: self._accept_done())
+
+    def _tick(self) -> None:
+        if self._finished:
+            return
+        if self._remaining > 0:
+            self._remaining -= 1
+            self._draw()
+            self._after_id = self._win.after(1000, self._tick)
+        else:
+            self._time_up()
+
+    def _time_up(self) -> None:
+        self._finished = True
+        self._draw()
+        threading.Thread(target=self._play_alarm, daemon=True).start()
+
+    @staticmethod
+    def _play_alarm() -> None:
+        try:
+            for _ in range(3):
+                winsound.Beep(880, 350)
+                time.sleep(0.15)
+            winsound.Beep(1047, 700)
+        except Exception:
+            pass
+
+    def _destroy_secondary(self) -> None:
+        for sw in self._secondary_wins:
+            try:
+                sw.destroy()
+            except Exception:
+                pass
+        self._secondary_wins.clear()
+
+    def _cancel(self) -> None:
+        if self._after_id:
+            self._win.after_cancel(self._after_id)
+            self._after_id = None
+        self._destroy_secondary()
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+        self._on_cancel()
+
+    def _accept_done(self) -> None:
+        self._destroy_secondary()
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+        self._on_complete()
+
+    def destroy(self) -> None:
+        if self._after_id:
+            try:
+                self._win.after_cancel(self._after_id)
+            except Exception:
+                pass
+            self._after_id = None
+        self._destroy_secondary()
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+
+
+class AlarmOverlayWindow:
+    def __init__(self, root: tk.Tk, alarm: dict, on_dismiss: Any, on_snooze: Any) -> None:
+        self._alarm = alarm
+        self._on_dismiss = on_dismiss
+        self._on_snooze = on_snooze
+
+        self._win = tk.Toplevel(root)
+        self._win.attributes("-topmost", True)
+        self._win.overrideredirect(True)
+        self._win.configure(bg="#1c1508")
+
+        root.update_idletasks()
+        rx = root.winfo_x()
+        ry = root.winfo_y()
+        rh = root.winfo_height()
+        self._win.geometry(f"400x140+{rx}+{ry + rh + 4}")
+
+        self._build()
+        threading.Thread(target=self._play_alarm_sound, daemon=True).start()
+
+    def _build(self) -> None:
+        border = tk.Frame(self._win, bg="#d97706", padx=2, pady=2)
+        border.pack(fill="both", expand=True)
+        inner = tk.Frame(border, bg="#1c1508")
+        inner.pack(fill="both", expand=True)
+
+        hdr = tk.Frame(inner, bg="#1c1508")
+        hdr.pack(fill="x", padx=10, pady=(10, 2))
+        tk.Label(hdr, text="🔔 ¡Recordatorio!", fg="#fbbf24", bg="#1c1508",
+                 font=("Microsoft YaHei UI", 11, "bold")).pack(side="left")
+        tk.Label(hdr, text=self._alarm.get("time", ""), fg="#fcd34d", bg="#1c1508",
+                 font=("Microsoft YaHei UI", 11, "bold")).pack(side="right")
+
+        tk.Label(inner, text=self._alarm.get("label", "Recordatorio"),
+                 fg="#f8fafc", bg="#1c1508",
+                 font=("Microsoft YaHei UI", 13, "bold"),
+                 wraplength=360).pack(padx=10, pady=(4, 8))
+
+        btn_row = tk.Frame(inner, bg="#1c1508")
+        btn_row.pack(pady=(0, 10))
+        tk.Button(btn_row, text="OK", command=self._dismiss,
+                  bg="#92400e", fg="#fef3c7",
+                  activebackground="#b45309", activeforeground="#fef3c7",
+                  relief="flat", padx=18, pady=5,
+                  font=("Microsoft YaHei UI", 9, "bold")).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row, text="Posponer 10 min", command=self._snooze,
+                  bg="#1c1508", fg="#a3a3a3",
+                  activebackground="#292015", activeforeground="#d4d4d4",
+                  relief="flat", padx=10, pady=5,
+                  font=("Microsoft YaHei UI", 9),
+                  highlightbackground="#44403c", highlightthickness=1).pack(side="left")
+
+    @staticmethod
+    def _play_alarm_sound() -> None:
+        try:
+            for base in [600, 700, 800]:
+                winsound.Beep(base, 180)
+                time.sleep(0.05)
+                winsound.Beep(base + 150, 280)
+                time.sleep(0.18)
+        except Exception:
+            pass
+
+    def _dismiss(self) -> None:
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+        self._on_dismiss()
+
+    def _snooze(self) -> None:
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+        self._on_snooze()
+
+    def destroy(self) -> None:
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+
+
+class MiniGame:
+    GRAVITY = 0.75
+    JUMP_VEL = -11.5
+    TICK_MS = 30
+    CHAR_X = 90
+    BASE_SPEED = 4.5
+    MAX_SPEED = 14.0
+    SPEED_ACCEL = 0.005
+    FRAMES_PER_TICK = 4
+
+    _SOUNDS_DIR = Path(__file__).parent / "sounds"
+
+    def __init__(
+        self,
+        root: tk.Tk,
+        char: dict,
+        house: dict,
+        sprite_renderer: SpriteRenderer,
+        bg_renderer: BackgroundRenderer,
+        data_store: DataStore,
+        on_done: Any,
+    ) -> None:
+        self._char = char
+        self._house = house
+        self._sprite_renderer = sprite_renderer
+        self._bg_renderer = bg_renderer
+        self._data_store = data_store
+        self._on_done = on_done
+
+        self._W, self._H = 600, 200
+        self._ground_y = int(self._H * 0.78)
+
+        self._running = False
+        self._game_over = False
+        self._speed = self.BASE_SPEED
+        self._score_px = 0.0
+        self._ticks = 0
+        self._char_y = float(self._ground_y)
+        self._char_vy = 0.0
+        self._on_ground = True
+        self._obstacles: list[dict] = []
+        self._next_obs_in = 45
+        self._sprite_frame = 0
+        self._frame_timer = 0
+        self._bg_offset = 0.0
+        self._after_id: str | None = None
+        self._img_refs: list = []
+        self._snd_jump: Any = None
+        self._snd_crash: Any = None
+        self._music_ready = False
+        self._init_audio()
+
+        self._sprite_set = char.get("sprite_set", "Dino")
+        self._game_scale = SPRITE_SET_SCALE_DEFAULTS.get(self._sprite_set, 1.0) * 0.85
+
+        self._win = tk.Toplevel(root)
+        self._win.title(f"¡Corre, {char.get('name', 'Mascota')}!")
+        self._win.configure(bg="#0f172a")
+        self._win.resizable(False, False)
+        root.attributes("-topmost", False)
+        self._win.attributes("-topmost", True)
+        self._win.lift()
+        x = root.winfo_x() + (root.winfo_width() - self._W) // 2
+        y = root.winfo_y() + root.winfo_height() + 8
+        self._win.geometry(f"{self._W}x{self._H}+{x}+{max(0, y)}")
+
+        self._canvas = tk.Canvas(self._win, width=self._W, height=self._H,
+                                  bg="#0f172a", highlightthickness=0)
+        self._canvas.pack()
+
+        self._win.bind("<space>", self._on_input)
+        self._win.bind("<Return>", self._on_input)
+        self._win.bind("<Destroy>", lambda e: self._cleanup() if e.widget is self._win else None)
+        self._win.focus_set()
+        self._draw_start_screen()
+
+    def _draw_start_screen(self) -> None:
+        self._img_refs.clear()
+        c = self._canvas
+        c.delete("all")
+        self._draw_bg(0)
+        self._draw_character(self._ground_y, frame=0)
+        c.create_line(0, self._ground_y, self._W, self._ground_y, fill="#475569", width=2)
+        c.create_text(self._W // 2, self._H // 2 - 16,
+                      text="Presioná  ESPACIO  para empezar",
+                      fill="#f8fafc", font=("Microsoft YaHei UI", 12, "bold"), anchor="center")
+
+    def _init_audio(self) -> None:
+        if not _PYGAME_OK:
+            return
+        try:
+            f_music = self._SOUNDS_DIR / "game_music.wav"
+            if f_music.exists():
+                _pygame.mixer.music.load(str(f_music))
+                self._music_ready = True
+            f_jump = self._SOUNDS_DIR / "jump.wav"
+            if f_jump.exists():
+                self._snd_jump = _pygame.mixer.Sound(str(f_jump))
+            f_crash = self._SOUNDS_DIR / "game_over.wav"
+            if f_crash.exists():
+                self._snd_crash = _pygame.mixer.Sound(str(f_crash))
+        except Exception:
+            pass
+
+    def _start_music(self) -> None:
+        if self._music_ready:
+            try:
+                _pygame.mixer.music.play(-1)
+            except Exception:
+                pass
+
+    def _stop_music(self) -> None:
+        try:
+            _pygame.mixer.music.stop()
+        except Exception:
+            pass
+
+    def _play_crash(self) -> None:
+        if self._snd_crash:
+            try:
+                self._snd_crash.play()
+            except Exception:
+                pass
+
+    def _play_jump(self) -> None:
+        if self._snd_jump:
+            try:
+                self._snd_jump.play()
+            except Exception:
+                pass
+
+    def _on_input(self, _: Any = None) -> None:
+        if self._game_over:
+            return
+        if not self._running:
+            self._running = True
+            self._start_music()
+            self._tick()
+            return
+        if self._on_ground:
+            self._char_vy = self.JUMP_VEL
+            self._on_ground = False
+            self._play_jump()
+
+    def _tick(self) -> None:
+        if self._game_over or not self._running:
+            return
+        self._ticks += 1
+        self._speed = min(self.MAX_SPEED, self.BASE_SPEED + self._ticks * self.SPEED_ACCEL)
+
+        # Physics
+        self._char_vy += self.GRAVITY
+        self._char_y += self._char_vy
+        if self._char_y >= self._ground_y:
+            self._char_y = float(self._ground_y)
+            self._char_vy = 0.0
+            self._on_ground = True
+
+        # Scroll & score
+        self._score_px += self._speed
+        self._bg_offset += self._speed
+
+        # Spawn obstacle
+        self._next_obs_in -= 1
+        if self._next_obs_in <= 0:
+            h = random.randint(22, 50)
+            w = random.randint(14, 22)
+            self._obstacles.append({"x": float(self._W + 10), "h": h, "w": w})
+            gap = max(22, int(72 - self._speed * 3.2))
+            self._next_obs_in = gap + random.randint(-4, 10)
+
+        for obs in self._obstacles:
+            obs["x"] -= self._speed
+        self._obstacles = [o for o in self._obstacles if o["x"] + o["w"] > 0]
+
+        # Sprite animation
+        self._frame_timer += 1
+        if self._frame_timer >= self.FRAMES_PER_TICK:
+            self._frame_timer = 0
+            fc = self._sprite_renderer._frame_count_for(self._sprite_set, "working", "neutral")
+            self._sprite_frame = (self._sprite_frame + 1) % fc
+
+        if self._check_collision():
+            self._end_game()
+            return
+
+        self._render_frame()
+        self._after_id = self._win.after(self.TICK_MS, self._tick)
+
+    def _check_collision(self) -> bool:
+        try:
+            spr = self._sprite_renderer.get_frame(
+                "working", "neutral", self._sprite_frame,
+                scale=self._game_scale, sprite_set=self._sprite_set)
+            sw, sh = spr.width(), spr.height()
+        except Exception:
+            sw, sh = 28, 40
+        mg = 10
+        cl = self.CHAR_X - sw // 2 + mg
+        cr = self.CHAR_X + sw // 2 - mg
+        ct = self._char_y - sh + mg
+        cb = self._char_y - mg
+        for obs in self._obstacles:
+            ol, or_ = obs["x"], obs["x"] + obs["w"]
+            ot, ob = self._ground_y - obs["h"], float(self._ground_y)
+            if cl < or_ and cr > ol and ct < ob and cb > ot:
+                return True
+        return False
+
+    def _render_frame(self) -> None:
+        self._img_refs.clear()
+        c = self._canvas
+        c.delete("all")
+        self._draw_bg(int(self._bg_offset))
+        c.create_line(0, self._ground_y, self._W, self._ground_y, fill="#475569", width=2)
+        theme = self._house.get("background", "oficina")
+        for obs in self._obstacles:
+            self._draw_obstacle(c, int(obs["x"]), obs["h"], obs["w"], theme)
+        self._draw_character(self._char_y, self._sprite_frame)
+        meters = int(self._score_px / 30)
+        c.create_text(self._W - 10, 10, text=f"{meters} m",
+                      fill="#fbbf24", font=("Microsoft YaHei UI", 10, "bold"), anchor="ne")
+
+    def _draw_obstacle(self, c: tk.Canvas, x: int, h: int, w: int, theme: str) -> None:
+        gy = self._ground_y
+        if theme == "oficina":
+            # Caja de cartón
+            c.create_rectangle(x, gy - h, x + w, gy,
+                                fill="#b45309", outline="#92400e", width=1)
+            c.create_line(x, gy - h, x + w, gy, fill="#92400e", width=1)
+            c.create_line(x + w, gy - h, x, gy, fill="#92400e", width=1)
+            c.create_line(x, gy - h // 2, x + w, gy - h // 2, fill="#92400e", width=1)
+        elif theme == "bosque":
+            # Tronco de árbol
+            c.create_rectangle(x, gy - h, x + w, gy,
+                                fill="#78350f", outline="#57220a", width=1)
+            ring_step = max(6, h // 4)
+            for ry in range(gy - h + ring_step, gy, ring_step):
+                c.create_line(x + 2, ry, x + w - 2, ry, fill="#57220a", width=1)
+        elif theme == "montanas":
+            # Piedra
+            cx_ = x + w // 2
+            pts = [x, gy, x + w // 4, gy - h, cx_, gy - int(h * 1.1),
+                   x + int(w * 0.78), gy - int(h * 0.85), x + w, gy]
+            c.create_polygon(pts, fill="#6b7280", outline="#4b5563", width=1)
+            c.create_oval(x + w // 4, gy - int(h * 0.6),
+                          x + int(w * 0.6), gy - int(h * 0.3),
+                          fill="#9ca3af", outline="")
+        elif theme == "noche":
+            # Luz/farol
+            pole_w = max(3, w // 4)
+            cx_ = x + w // 2
+            c.create_rectangle(cx_ - pole_w // 2, gy - h, cx_ + pole_w // 2, gy,
+                                fill="#374151", outline="#1f2937", width=1)
+            lamp_h = max(8, h // 3)
+            c.create_rectangle(x, gy - h, x + w, gy - h + lamp_h,
+                                fill="#fef08a", outline="#fde047", width=1)
+            c.create_oval(x + 2, gy - h + 2, x + w - 2, gy - h + lamp_h - 2,
+                          fill="#fef9c3", outline="")
+        elif theme == "playa":
+            # Pelota de playa
+            r = min(w, h) // 2
+            cx_, cy_ = x + w // 2, gy - r
+            c.create_oval(cx_ - r, cy_ - r, cx_ + r, cy_ + r,
+                          fill="#ef4444", outline="#dc2626", width=1)
+            c.create_arc(cx_ - r, cy_ - r, cx_ + r, cy_ + r,
+                         start=30, extent=120, fill="#f8fafc", outline="")
+            c.create_arc(cx_ - r, cy_ - r, cx_ + r, cy_ + r,
+                         start=210, extent=120, fill="#3b82f6", outline="")
+        else:
+            # Espacio → estrella
+            cx_, cy_ = x + w // 2, gy - h // 2
+            pts = []
+            import math as _m
+            for i in range(10):
+                angle = _m.radians(i * 36 - 90)
+                r = (w // 2) if i % 2 == 0 else (w // 4)
+                pts += [cx_ + r * _m.cos(angle), cy_ + r * _m.sin(angle)]
+            c.create_polygon(pts, fill="#fef08a", outline="#fde047", width=1)
+
+    def _draw_bg(self, offset: int) -> None:
+        bg_theme = self._house.get("background", "oficina")
+        grass_key = self._house.get("grass_color", "verde")
+        ground_rgb = next((g[2] for g in GRASS_COLORS if g[0] == grass_key), None)
+        self._bg_renderer.draw(self._canvas, self._W, self._H,
+                                theme=bg_theme, ground_color=ground_rgb, x_offset=offset)
+
+    def _draw_character(self, feet_y: float, frame: int = 0) -> None:
+        try:
+            spr = self._sprite_renderer.get_frame(
+                "working", "neutral", frame,
+                scale=self._game_scale, sprite_set=self._sprite_set)
+            self._canvas.create_image(self.CHAR_X, int(feet_y), image=spr, anchor="s")
+            self._img_refs.append(spr)
+        except Exception:
+            pass
+
+    def _end_game(self) -> None:
+        self._game_over = True
+        self._running = False
+        self._stop_music()
+        self._play_crash()
+        if self._after_id:
+            try:
+                self._win.after_cancel(self._after_id)
+            except Exception:
+                pass
+
+        meters = int(self._score_px / 30)
+        char_id = self._char.get("id", "")
+        char_name = self._char.get("name", "Mascota")
+        self._data_store.add_game_score(char_id, char_name, meters)
+        top = self._data_store.get_top_scores(3)
+
+        self._render_frame()
+        c = self._canvas
+        c.create_rectangle(0, 0, self._W, self._H, fill="#000000", stipple="gray50", outline="")
+        c.create_text(self._W // 2, 44, text="GAME OVER",
+                      fill="#ef4444", font=("Microsoft YaHei UI", 22, "bold"), anchor="center")
+        c.create_text(self._W // 2, 78, text=f"{meters} metros",
+                      fill="#f8fafc", font=("Microsoft YaHei UI", 14, "bold"), anchor="center")
+        c.create_text(self._W // 2, 102, text="— TOP 3 —",
+                      fill="#64748b", font=("Microsoft YaHei UI", 8), anchor="center")
+        medals = ["🥇", "🥈", "🥉"]
+        for i, entry in enumerate(top):
+            is_new = entry.get("char_id") == char_id and entry.get("score") == meters
+            color = "#fbbf24" if is_new else "#e2e8f0"
+            medal = medals[i] if i < len(medals) else "   "
+            c.create_text(self._W // 2, 116 + i * 16,
+                          text=f"{medal}  {entry['char_name']}  —  {entry['score']} m",
+                          fill=color, font=("Microsoft YaHei UI", 9), anchor="center")
+        bx1, by1 = self._W // 2 - 55, self._H - 26
+        bx2, by2 = self._W // 2 + 55, self._H - 8
+        c.create_rectangle(bx1, by1, bx2, by2, fill="#1e293b", outline="#334155",
+                            width=1, tags="close_btn")
+        c.create_text((bx1 + bx2) // 2, (by1 + by2) // 2, text="Cerrar",
+                      fill="#cbd5e1", font=("Microsoft YaHei UI", 9),
+                      tags="close_btn", anchor="center")
+        c.tag_bind("close_btn", "<Button-1>", lambda _: self._close())
+
+    def _cleanup(self) -> None:
+        self._stop_music()
+        if self._after_id:
+            try:
+                self._win.after_cancel(self._after_id)
+            except Exception:
+                pass
+        if self._on_done:
+            self._on_done()
+
+    def _close(self) -> None:
+        try:
+            self._win.destroy()
+        except Exception:
+            pass
+
+
+class MascotaApp:
     def __init__(self) -> None:
         self.base_dir = Path(__file__).resolve().parent
         self.instance_mutex = self._acquire_single_instance()
@@ -1726,15 +2723,19 @@ class NotchiWindowsApp:
         self.xp_system = XPSystem(self.data_store)
         self.xp_system.on_level_up(self._on_level_up)
         self.break_system = BreakSystem(self.data_store)
+        self.alarm_system = AlarmSystem(self.data_store)
+        self._alarm_overlay: AlarmOverlayWindow | None = None
+        self._current_alarm: dict | None = None
         self._levelup_message = ""
         self._levelup_until = 0.0
-        self._break_confirm_until = 0.0
-        self._banner_shown_at = 0.0
-        self._break_banner_bounds: tuple[int, int, int, int] | None = None
+        self._break_overlay: BreakOverlayWindow | None = None
+        self._break_accept_bounds: tuple[int, int, int, int] | None = None
+        self._break_cancel_bounds: tuple[int, int, int, int] | None = None
         self._pending_picker_session: str | None = None
         self.parser = ConversationParser()
         self.store = SessionStore(self.parser, self.xp_system)
         self.installer = HookInstaller(self.base_dir)
+        self.codex_installer = CodexHookInstaller(self.base_dir)
         self.sprite_renderer = SpriteRenderer(self.base_dir / "assets" / "sprites")
         self.bg_renderer = BackgroundRenderer(self.base_dir / "assets")
         self.dec_renderer = DecorationRenderer()
@@ -1744,6 +2745,9 @@ class NotchiWindowsApp:
         self.details_visible = False
         self.animation_phase = 0.0
         self.frame_tick = 0.0
+        self._session_phases: dict[str, float] = {}
+        self._session_frames: dict[str, float] = {}
+        self._bg_scroll_x: float = 0.0
         self.sprite_bounds: dict[str, tuple[float, float, float, float]] = {}
         self._cwd_label_text: str = ""
         self._cwd_label_until: float = 0.0
@@ -1758,10 +2762,11 @@ class NotchiWindowsApp:
         self._dragging_decoration: str | None = None
         self._dec_drag_offset: tuple[float, float] = (0.0, 0.0)
         self._dec_drag_pos: tuple[float, float] | None = None
+        self._house_win_open: bool = False
 
         self.root = tk.Tk()
-        self.root.title("Notchi for Windows")
-        self.root.geometry("420x180+730+30")
+        self.root.title("Mascota")
+        self.root.geometry("420x158+730+30")
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=TRANSPARENT_KEY)
@@ -1783,6 +2788,9 @@ class NotchiWindowsApp:
         self._auto_install_hook()
         if not self.data_store.get("characters"):
             self.root.after(600, self._show_first_use_popup)
+        if self.data_store.get("greeted_date") != time.strftime("%Y-%m-%d"):
+            self.data_store.set("alarms", [])
+            self.root.after(800, self._show_daily_greeting)
 
     @staticmethod
     def _acquire_single_instance() -> int:
@@ -1796,11 +2804,15 @@ class NotchiWindowsApp:
             sys.exit(0)
         return mutex
 
-    def _on_level_up(self, new_level: int) -> None:
+    def _on_level_up(self, new_level: int, char_id: str | None = None) -> None:
         self._levelup_message = f"Level Up!  Lv.{new_level}"
         self._levelup_until = time.time() + 3.5
         self._levelup_sparkles_until = time.time() + 3.5
         threading.Thread(target=self._play_levelup_sound, daemon=True).start()
+        if new_level >= 2:
+            char = self.data_store.get_character(char_id) if char_id else self.data_store.get_active_character()
+            if char:
+                self.root.after(3800, lambda: self._show_game_offer(new_level, char["id"]))
 
     @staticmethod
     def _play_levelup_sound() -> None:
@@ -1811,108 +2823,90 @@ class NotchiWindowsApp:
             pass
 
     def _build_ui(self) -> None:
+        # ── Outer transparent frame ──────────────────────────────────
         self.frame = tk.Frame(self.root, bg=TRANSPARENT_KEY, bd=0, highlightthickness=0)
-        self.frame.pack(fill="both", expand=True, padx=6, pady=6)
+        self.frame.pack(fill="both", expand=True, padx=4, pady=4)
 
-        self.header = tk.Frame(self.frame, bg="#111827")
-        self.header.pack(fill="x", padx=14, pady=(12, 8))
-        self.header.bind("<ButtonPress-1>", self.start_drag)
-        self.header.bind("<B1-Motion>", self.do_drag)
-
-        title = tk.Label(self.header, text="Notchi", fg="#f8fafc", bg="#111827", font=("Microsoft YaHei UI", 14, "bold"))
-        title.pack(side="left")
-        title.bind("<ButtonPress-1>", self.start_drag)
-        title.bind("<B1-Motion>", self.do_drag)
-
-        actions = tk.Frame(self.header, bg="#111827")
-        actions.pack(side="right")
-
-        tk.Button(actions, textvariable=self.toggle_var, command=self.toggle_details, bg="#0f172a", fg="#cbd5e1", activebackground="#1e293b", activeforeground="#f8fafc", relief="flat", padx=8, pady=4).pack(side="left", padx=(0, 6))
-        tk.Button(actions, text="Hook", command=self.install_hook, bg="#2563eb", fg="white", activebackground="#1d4ed8", activeforeground="white", relief="flat", padx=10, pady=4).pack(side="left", padx=(0, 6))
-        tk.Button(actions, text="Casa", command=self.open_house_editor, bg="#1f2937", fg="#cbd5e1", activebackground="#374151", activeforeground="#f8fafc", relief="flat", padx=8, pady=4).pack(side="left", padx=(0, 6))
-        tk.Button(actions, text="Personaje", command=self.open_character_editor, bg="#1f2937", fg="#cbd5e1", activebackground="#374151", activeforeground="#f8fafc", relief="flat", padx=8, pady=4).pack(side="left", padx=(0, 6))
-        tk.Button(actions, text="⚙", command=self.open_settings, bg="#1f2937", fg="#cbd5e1", activebackground="#374151", activeforeground="#f8fafc", relief="flat", padx=8, pady=4).pack(side="left", padx=(0, 6))
-        tk.Button(actions, text="Close", command=self.shutdown, bg="#1f2937", fg="#cbd5e1", activebackground="#374151", activeforeground="#f8fafc", relief="flat", padx=10, pady=4).pack(side="left")
-
-        self.floating_actions = tk.Frame(self.frame, bg="#111827", bd=0, highlightthickness=1, highlightbackground="#334155")
-        self.floating_install = tk.Button(
-            self.floating_actions,
-            text="Install",
-            command=self.install_hook,
-            bg="#2563eb",
-            fg="white",
-            activebackground="#1d4ed8",
-            activeforeground="white",
-            relief="flat",
-            padx=8,
-            pady=3,
-        )
-        self.floating_install.pack(side="left", padx=(6, 4), pady=6)
-        self.floating_details = tk.Button(
-            self.floating_actions,
-            textvariable=self.toggle_var,
-            command=self.toggle_details,
-            bg="#0f172a",
-            fg="#cbd5e1",
-            activebackground="#1e293b",
-            activeforeground="#f8fafc",
-            relief="flat",
-            padx=8,
-            pady=3,
-            width=7,
-        )
-        self.floating_details.pack(side="left", padx=(0, 4), pady=6)
-        tk.Button(
-            self.floating_actions,
-            text="✕",
-            command=self.shutdown,
-            bg="#7f1d1d",
-            fg="#fca5a5",
-            activebackground="#991b1b",
-            activeforeground="#fee2e2",
-            relief="flat",
-            padx=7,
-            pady=3,
-        ).pack(side="left", padx=(0, 6), pady=6)
-
-        self.status_label = tk.Label(self.frame, textvariable=self.status_var, fg="#94a3b8", bg="#111827", anchor="w", justify="left", font=("Microsoft YaHei UI", 9))
-
-        self.hero = tk.Canvas(self.frame, width=472, height=110, bg=TRANSPARENT_KEY, highlightthickness=0, relief="flat")
-        self.hero.pack(fill="x", padx=14, pady=(10, 8))
+        # ── Hero canvas (mascots) ────────────────────────────────────
+        self.hero = tk.Canvas(self.frame, width=412, height=112,
+                               bg=TRANSPARENT_KEY, highlightthickness=0, relief="flat")
+        self.hero.pack(fill="x")
         self.hero.bind("<ButtonPress-1>", self.start_drag)
         self.hero.bind("<B1-Motion>", self.do_drag)
         self.hero.bind("<ButtonRelease-1>", self.on_hero_release)
         self.hero.bind("<Double-Button-1>", self.on_hero_double_click)
         self.hero.bind("<Button-3>", self.on_hero_right_click)
 
-        self.body_frame = tk.Frame(self.frame, bg="#111827")
-        self.body_scrollbar = tk.Scrollbar(self.body_frame, orient="vertical")
-        self.body = tk.Text(
-            self.body_frame,
-            bg="#0f172a",
-            fg="#e2e8f0",
-            insertbackground="#e2e8f0",
-            relief="flat",
-            wrap="word",
-            state="disabled",
-            font=("Microsoft YaHei UI", 10),
-            padx=12,
-            pady=10,
-            yscrollcommand=self.body_scrollbar.set,
-        )
-        self.body_scrollbar.configure(command=self.body.yview)
-        self.body.pack(side="left", fill="both", expand=True)
-        self.body_scrollbar.pack(side="right", fill="y")
+        # ── Bottom toolbar (always visible) ─────────────────────────
+        C_TOOLBAR = "#0d1117"
+        C_BTN     = "#161b22"
+        C_HOVER   = "#21262d"
+        C_TEXT    = "#8b949e"
 
-        self.xp_label = tk.Label(
-            self.frame,
-            text="",
-            fg="#64748b",
-            bg="#1e293b",
-            font=("Microsoft YaHei UI", 8),
-            padx=10,
-            pady=3,
-        )
+        self.toolbar = tk.Frame(self.frame, bg=C_TOOLBAR, height=38)
+        self.toolbar.pack(fill="x")
+        self.toolbar.pack_propagate(False)
+
+        # Divider + buttons on the right (packed first to guarantee fixed space)
+        right = tk.Frame(self.toolbar, bg=C_TOOLBAR)
+        right.pack(side="right", padx=(0, 4), fill="y")
+
+        # XP label on the left (gets remaining space after buttons)
+        self.xp_label = tk.Label(self.toolbar, text="", fg="#58a6ff", bg=C_TOOLBAR,
+                                  font=("Microsoft YaHei UI", 8), anchor="w")
+        self.xp_label.pack(side="left", padx=(8, 2), fill="y")
+
+        def _btn(txt: str, cmd: Any, fg: str = C_TEXT, bg: str = C_BTN,
+                 emoji: bool = False) -> tk.Button:
+            fnt = ("Segoe UI Emoji", 10) if emoji else ("Microsoft YaHei UI", 9)
+            b = tk.Button(right, text=txt, command=cmd,
+                          bg=bg, fg=fg,
+                          activebackground=C_HOVER, activeforeground="#e6edf3",
+                          relief="flat", padx=7, pady=3,
+                          font=fnt, bd=0, highlightthickness=0)
+            b.pack(side="left", padx=2, pady=4)
+            return b
+
+        _btn("≡", self.toggle_details, fg="#58a6ff")
+        _btn("🏠", self.open_house_editor, emoji=True)
+        _btn("👤", self.open_character_editor, emoji=True)
+        _btn("⏰", self.open_alarms, fg="#e3b341", emoji=True)
+        _btn("⚙", self.open_settings)
+        self.floating_install = tk.Button(right)   # dummy ref, hook moved to settings
+        _btn("✕", self.shutdown, fg="#fee2e2", bg="#7f1d1d")
+
+        # ── Status label (shown in details mode) ────────────────────
+        self.status_label = tk.Label(self.frame, textvariable=self.status_var,
+                                      fg="#30363d", bg=C_TOOLBAR,
+                                      anchor="w", font=("Microsoft YaHei UI", 7))
+
+        # ── Header (shown in details mode, draggable) ────────────────
+        self.header = tk.Frame(self.frame, bg=C_TOOLBAR)
+        accent_bar = tk.Frame(self.header, bg="#7c3aed", width=3)
+        accent_bar.pack(side="left", fill="y", padx=(0, 8))
+        accent_bar.bind("<ButtonPress-1>", self.start_drag)
+        accent_bar.bind("<B1-Motion>", self.do_drag)
+        hdr_lbl = tk.Label(self.header, text="Pixel Companion",
+                            fg="#e6edf3", bg=C_TOOLBAR,
+                            font=("Microsoft YaHei UI", 10, "bold"))
+        hdr_lbl.pack(side="left", pady=8)
+        hdr_lbl.bind("<ButtonPress-1>", self.start_drag)
+        hdr_lbl.bind("<B1-Motion>", self.do_drag)
+        self.header.bind("<ButtonPress-1>", self.start_drag)
+        self.header.bind("<B1-Motion>", self.do_drag)
+
+        # ── Details body (canvas-based, distinct from the mascot view) ────────
+        self.body_frame = tk.Frame(self.frame, bg="#0d1117")
+        self.body_canvas = tk.Canvas(self.body_frame, bg="#0d1117",
+                                      highlightthickness=0, relief="flat")
+        self.body_canvas.pack(fill="both", expand=True)
+        # Keep self.body as hidden dummy so render loop references don't crash
+        self.body_scrollbar = tk.Scrollbar(self.body_frame, orient="vertical")
+        self.body = tk.Text(self.body_frame, state="disabled")
+
+        # Dummy refs kept for legacy update_layout calls
+        self.floating_actions = tk.Frame(self.frame, bg=C_TOOLBAR)
+        self.floating_details = tk.Button(self.floating_actions)
 
         self._configure_transparency()
         self.update_layout()
@@ -1927,6 +2921,7 @@ class NotchiWindowsApp:
     def _auto_install_hook(self) -> None:
         ok, message = self.installer.install()
         self.status_var.set(message if ok else f"Auto-install skipped: {message}")
+        self.codex_installer.install()
 
     def _set_tool_window_style(self) -> None:
         try:
@@ -1937,7 +2932,20 @@ class NotchiWindowsApp:
             pass
 
     def start_drag(self, event: tk.Event) -> None:
-        if not self.details_visible:
+        # Banner buttons fire immediately on press (no drag delay)
+        if self._break_accept_bounds is not None:
+            bx1, by1, bx2, by2 = self._break_accept_bounds
+            if bx1 <= event.x <= bx2 and by1 <= event.y <= by2:
+                self._absorb_next_release = True
+                self._start_break()
+                return
+        if self._break_cancel_bounds is not None:
+            bx1, by1, bx2, by2 = self._break_cancel_bounds
+            if bx1 <= event.x <= bx2 and by1 <= event.y <= by2:
+                self._absorb_next_release = True
+                self.break_system.snooze()
+                return
+        if not self.details_visible and self._house_win_open:
             dec = self._decoration_at_point(event.x, event.y)
             if dec is not None:
                 self._dragging_decoration = dec
@@ -2012,31 +3020,35 @@ class NotchiWindowsApp:
         self.update_layout()
 
     def update_layout(self) -> None:
+        C_TOOLBAR = "#0d1117"
+        # Forget dynamic elements
         self.header.pack_forget()
-        self.floating_actions.place_forget()
         self.status_label.pack_forget()
         self.body_frame.pack_forget()
-        self.xp_label.pack_forget()
+        self.floating_actions.place_forget()
+
         if self.details_visible:
-            self.frame.configure(bg="#111827", highlightthickness=1, highlightbackground="#334155")
-            self.root.configure(bg="#111827")
-            self.hero.configure(bg="#111827")
-            self.hero.configure(width=500, height=110)
-            self.header.pack(fill="x", padx=14, pady=(12, 8))
-            self.status_label.pack(fill="x", padx=14)
-            self.body_frame.pack(fill="both", expand=True, padx=14, pady=(8, 12))
-            self.root.geometry("570x430")
-            self.toggle_var.set("Hide")
+            self.frame.configure(bg=C_TOOLBAR, highlightthickness=1,
+                                  highlightbackground="#30363d")
+            self.root.configure(bg=C_TOOLBAR)
+            self.hero.configure(bg=C_TOOLBAR, width=510, height=110)
+            # Pack order: header → hero → status → body → toolbar
+            self.toolbar.pack_forget()
+            self.header.pack(fill="x")
+            self.hero.pack(fill="x", pady=(0, 2))
+            self.status_label.pack(fill="x", padx=10)
+            self.body_frame.pack(fill="both", expand=True, padx=8, pady=(4, 6))
+            self.toolbar.pack(fill="x")
+            self.root.geometry("570x450")
+            self.toggle_var.set("▲ Ocultar")
         else:
             self.frame.configure(bg=TRANSPARENT_KEY, highlightthickness=0)
             self.root.configure(bg=TRANSPARENT_KEY)
-            self.hero.configure(bg=TRANSPARENT_KEY)
-            self.hero.configure(width=372, height=110)
-            self.root.geometry("420x180")
-            self.toggle_var.set("Details")
-            self.floating_actions.place(relx=1.0, x=-18, y=10, anchor="ne")
-            self.xp_label.configure(bg="#1e293b")
-            self.xp_label.pack(pady=(0, 6))
+            self.hero.configure(bg=TRANSPARENT_KEY, width=412, height=112)
+            self.hero.pack(fill="x")
+            self.toolbar.pack(fill="x")
+            self.root.geometry("420x158")
+            self.toggle_var.set("▼ Info")
         self._configure_transparency()
 
     def on_hero_click(self, event: tk.Event) -> None:
@@ -2044,10 +3056,15 @@ class NotchiWindowsApp:
             self._picker_win.lift()
             self._picker_win.focus_set()
             return
-        if self._break_banner_bounds is not None:
-            bx1, by1, bx2, by2 = self._break_banner_bounds
+        if self._break_accept_bounds is not None:
+            bx1, by1, bx2, by2 = self._break_accept_bounds
             if bx1 <= event.x <= bx2 and by1 <= event.y <= by2:
-                self._take_break()
+                self._start_break()
+                return
+        if self._break_cancel_bounds is not None:
+            bx1, by1, bx2, by2 = self._break_cancel_bounds
+            if bx1 <= event.x <= bx2 and by1 <= event.y <= by2:
+                self.break_system.snooze()
                 return
         session_id = self._session_id_at_point(event.x, event.y)
         if session_id is not None:
@@ -2057,7 +3074,6 @@ class NotchiWindowsApp:
             if target:
                 self._cwd_label_text = target.cwd or target.project_name
                 self._cwd_label_until = time.time() + 3.0
-                self._focus_session_window(target)
             return
         if self.details_visible:
             self.toggle_details()
@@ -2249,10 +3265,36 @@ class NotchiWindowsApp:
         except Exception:
             pass
 
-    def _take_break(self) -> None:
+    def _start_break(self) -> None:
+        if self._break_overlay is not None:
+            return
+        duration = max(1, int(self.break_system.duration_seconds()))
+        self._break_overlay = BreakOverlayWindow(
+            self.root, duration,
+            on_complete=self._on_break_complete,
+            on_cancel=self._on_break_cancel,
+        )
+
+    def _on_break_complete(self) -> None:
+        self._break_overlay = None
         self.break_system.mark_taken()
-        self._break_confirm_until = time.time() + 3.0
         self.xp_system.add_xp(5)
+
+    def _on_break_cancel(self) -> None:
+        self._break_overlay = None
+        self.break_system.mark_taken()
+
+    def _on_alarm_dismiss(self) -> None:
+        if self._current_alarm:
+            self.alarm_system.mark_triggered(self._current_alarm["id"])
+        self._alarm_overlay = None
+        self._current_alarm = None
+
+    def _on_alarm_snooze(self) -> None:
+        if self._current_alarm:
+            self.alarm_system.snooze_alarm(self._current_alarm["id"], minutes=10)
+        self._alarm_overlay = None
+        self._current_alarm = None
 
     def on_hero_double_click(self, event: tk.Event) -> None:
         # Cancel the single-click that was scheduled by the first ButtonRelease.
@@ -2266,7 +3308,10 @@ class NotchiWindowsApp:
         session_id = self._session_id_at_point(event.x, event.y)
         if session_id is not None:
             self.store.select_session(session_id)
-            self.toggle_details()
+            sessions = self.store.snapshot()
+            target = next((s for s in sessions if s.session_id == session_id), None)
+            if target:
+                self._focus_session_window(target)
             return
         if not self.details_visible:
             self.toggle_details()
@@ -2288,10 +3333,13 @@ class NotchiWindowsApp:
         sessions = self.store.snapshot()
         self._check_waiting_beeps(sessions)
         focused = self.store.effective_session()
-        installed = "installed" if self.installer.is_installed() else "not installed"
-        self.status_var.set(f"Listening on {APP_HOST}:{APP_PORT} | Claude hook {installed} | Active sessions: {len(sessions)}")
-        if focused and focused.character_id:
+        claude_hook = "✓" if self.installer.is_installed() else "✗"
+        codex_hook = "✓" if self.codex_installer.is_installed() else "✗"
+        self.status_var.set(f":{APP_PORT} | Claude {claude_hook} | Codex {codex_hook} | Sessions: {len(sessions)}")
+        if focused and focused.character_id and self.data_store.get_character(focused.character_id):
             xp_text = self.xp_system.bar_text_for(focused.character_id)
+            if self.data_store.get("active_character_id") != focused.character_id:
+                self.data_store.set_active_character(focused.character_id)
         else:
             xp_text = self.xp_system.bar_text()
         self.xp_label.configure(text=xp_text)
@@ -2302,70 +3350,123 @@ class NotchiWindowsApp:
                 self._pending_picker_session = pending[0]
                 self.root.after(100, lambda sid=pending[0]: self._show_character_picker(sid))
 
-        if self.break_system.banner_visible():
-            if self._banner_shown_at == 0.0:
-                self._banner_shown_at = time.time()
-            elif time.time() - self._banner_shown_at > 30.0:
-                self.break_system.snooze()
-                self._banner_shown_at = 0.0
-        else:
-            self._banner_shown_at = 0.0
-
         self.render_mascot(sessions)
 
-        lines: list[str] = []
-        if not sessions:
-            lines.append("No active Claude Code sessions yet.")
-            lines.append("")
-            lines.append("1. Start this app.")
-            lines.append("2. Click 'Install Hook'.")
-            lines.append("3. Open Claude Code and use it normally.")
-        elif focused is not None:
-            lines.append(self.xp_system.bar_text())
-            lines.append("")
-            lines.append(f"Selected: {focused.project_name} [{focused.state}]")
-            lines.append(f"Duration: {focused.duration}")
-            lines.append(f"Emotion: {focused.emotion}")
-            if focused.last_prompt:
-                lines.append(f"Prompt: {focused.last_prompt}")
-            if focused.current_tool:
-                lines.append(f"Tool: {focused.current_tool}")
-            lines.append(f"Mode: {focused.permission_mode}")
-            if focused.messages:
-                lines.append("Claude:")
-                for message in focused.messages[-2:]:
-                    preview = message.replace("\n", " ").strip()
-                    if len(preview) > 180:
-                        preview = preview[:177] + "..."
-                    lines.append(f"  {preview}")
-            lines.append("Recent:")
-            for entry in focused.events[-4:]:
-                lines.append(f"  - {entry}")
-            if len(sessions) > 1:
-                lines.append("")
-                lines.append("Other Sessions:")
-                for session in sessions:
-                    if session.session_id == focused.session_id:
-                        continue
-                    lines.append(f"  {session.project_name} [{session.state}] {session.emotion}")
-
         if self.details_visible:
-            self.body.configure(state="normal")
-            self.body.delete("1.0", "end")
-            self.body.insert("1.0", "\n".join(lines).rstrip())
-            self.body.configure(state="disabled")
+            self._draw_details(sessions, focused)
+
+        due_alarm = self.alarm_system.check_due()
+        if due_alarm and self._alarm_overlay is None:
+            self._current_alarm = due_alarm
+            self._alarm_overlay = AlarmOverlayWindow(
+                self.root, due_alarm,
+                on_dismiss=self._on_alarm_dismiss,
+                on_snooze=self._on_alarm_snooze,
+            )
+
         self.root.after(REFRESH_MS, self.render)
 
     def animate(self) -> None:
         sessions = self.store.snapshot()
-        active = sessions[0] if sessions else None
-        state = active.state if active else "idle"
-        emotion = active.emotion if active else "neutral"
+        active_ids = {s.session_id for s in sessions}
 
-        self.animation_phase += self._phase_step_for(state, emotion)
-        self.frame_tick += self._frame_step_for(state, emotion)
+        for session in sessions:
+            sid = session.session_id
+            self._session_phases[sid] = (
+                self._session_phases.get(sid, 0.0)
+                + self._phase_step_for(session.state, session.emotion)
+            )
+            self._session_frames[sid] = (
+                self._session_frames.get(sid, 0.0)
+                + self._frame_step_for(session.state, session.emotion)
+            )
+
+        # Clean up ended sessions
+        for sid in list(self._session_phases.keys()):
+            if sid not in active_ids:
+                self._session_phases.pop(sid, None)
+                self._session_frames.pop(sid, None)
+
+        # Global phase for effects independent of sessions (banner pulse, etc.)
+        self.animation_phase += self._phase_step_for("idle", "neutral")
+
+        if any(s.state == "working" for s in sessions):
+            self._bg_scroll_x += BG_SCROLL_SPEED
+
         self.render_mascot(sessions)
-        self.root.after(self._animation_delay_for(state, emotion), self.animate)
+        self.root.after(ANIMATION_MS, self.animate)
+
+    def _draw_details(self, sessions: list[SessionData], focused: SessionData | None) -> None:
+        c = self.body_canvas
+        c.update_idletasks()
+        w = c.winfo_width() or 510
+        c.delete("all")
+        STATE_COLOR = {
+            "working":    "#3fb950",
+            "waiting":    "#e3b341",
+            "compacting": "#58a6ff",
+            "sleeping":   "#8b949e",
+            "idle":       "#58a6ff",
+        }
+        EMOTION_COLOR = {
+            "happy":   "#f0883e",
+            "sad":     "#79c0ff",
+            "sob":     "#f85149",
+            "neutral": "#8b949e",
+        }
+        if not sessions:
+            c.create_text(w // 2, 48, anchor="center",
+                          text="Sin sesiones activas",
+                          fill="#30363d", font=("Microsoft YaHei UI", 11))
+            c.create_text(w // 2, 70, anchor="center",
+                          text="Abrí Claude Code para que aparezcan tus personajes",
+                          fill="#21262d", font=("Microsoft YaHei UI", 8))
+            return
+        pad, gap = 8, 6
+        card_h = 80
+        y = pad
+        for session in sessions[:5]:
+            is_focused = focused is not None and focused.session_id == session.session_id
+            sc = STATE_COLOR.get(session.state, "#58a6ff")
+            ec = EMOTION_COLOR.get(session.emotion, "#8b949e")
+            border = sc if is_focused else "#21262d"
+            c.create_rectangle(pad, y, w - pad, y + card_h,
+                                fill="#161b22", outline=border, width=1 + is_focused)
+            # Left state stripe
+            c.create_rectangle(pad, y, pad + 4, y + card_h, fill=sc, outline="")
+            # Project name
+            c.create_text(pad + 12, y + 12, anchor="w",
+                          text=session.project_name,
+                          fill="#e6edf3", font=("Microsoft YaHei UI", 9, "bold"))
+            # State + emotion badges (right)
+            badge = f"{session.state}  {session.emotion}"
+            c.create_text(w - pad - 6, y + 12, anchor="e",
+                          text=session.state.upper(),
+                          fill=sc, font=("Microsoft YaHei UI", 7, "bold"))
+            c.create_text(w - pad - 6, y + 24, anchor="e",
+                          text=session.emotion,
+                          fill=ec, font=("Microsoft YaHei UI", 7))
+            # Duration
+            c.create_text(pad + 12, y + 28, anchor="w",
+                          text=f"⏱  {session.duration}",
+                          fill="#6e7681", font=("Microsoft YaHei UI", 8))
+            # Last prompt
+            if session.last_prompt:
+                prompt = session.last_prompt[:55] + ("…" if len(session.last_prompt) > 55 else "")
+                c.create_text(pad + 12, y + 46, anchor="w",
+                              text=f"›  {prompt}",
+                              fill="#8b949e", font=("Microsoft YaHei UI", 8))
+            # Tool
+            if session.current_tool:
+                c.create_text(pad + 12, y + 62, anchor="w",
+                              text=f"⚙  {session.current_tool}",
+                              fill="#7c3aed", font=("Microsoft YaHei UI", 8))
+            elif session.messages:
+                preview = session.messages[-1].replace("\n", " ")[:55]
+                c.create_text(pad + 12, y + 62, anchor="w",
+                              text=f"✦  {preview}",
+                              fill="#30363d", font=("Microsoft YaHei UI", 8))
+            y += card_h + gap
 
     def render_mascot(self, sessions: list[SessionData]) -> None:
         canvas = self.hero
@@ -2385,7 +3486,8 @@ class NotchiWindowsApp:
         ground_rgb = next((g[2] for g in GRASS_COLORS if g[0] == grass_key), None)
 
         if not self.details_visible:
-            self.bg_renderer.draw(canvas, width, height, theme=bg_theme, ground_color=ground_rgb)
+            self.bg_renderer.draw(canvas, width, height, theme=bg_theme, ground_color=ground_rgb,
+                                   x_offset=int(self._bg_scroll_x))
             self.decoration_bounds = {}
             for dec in active_decorations:
                 img = self.dec_renderer.get(dec, height)
@@ -2398,18 +3500,24 @@ class NotchiWindowsApp:
                 else:
                     dx = stored[0] * width
                     dy = stored[1] * height
+                draw_dx = (dx - self._bg_scroll_x) % width
                 dw, dh = self.dec_renderer.size(dec, height)
-                canvas.create_image(int(dx), int(dy), image=img, anchor="center")
-                self.decoration_bounds[dec] = (dx - dw / 2, dy - dh / 2,
-                                               dx + dw / 2, dy + dh / 2)
+                canvas.create_image(int(draw_dx), int(dy), image=img, anchor="center")
+                self.decoration_bounds[dec] = (draw_dx - dw / 2, dy - dh / 2,
+                                               draw_dx + dw / 2, dy + dh / 2)
 
         sparkles_active = time.time() < self._levelup_sparkles_until
         ordered_sessions = sorted(sessions, key=lambda item: item.sprite_x)
         for index, session in enumerate(ordered_sessions):
             state = session.state
             emotion = session.emotion
-            bob = self._bob_offset(state, emotion)
+            sid = session.session_id
+            sess_phase = self._session_phases.get(sid, 0.0)
+            sess_frame = self._session_frames.get(sid, 0.0)
+            bob = self._bob_offset(state, emotion, sess_phase)
             pet_x = self._sprite_canvas_x(index, len(ordered_sessions), width)
+            if state != "working":
+                pet_x = (pet_x - self._bg_scroll_x) % width
             is_selected = focused is not None and focused.session_id == session.session_id
             session_char = self.data_store.get_character(session.character_id) if session.character_id else None
             char_level = session_char.get("level", 1) if session_char else 1
@@ -2419,22 +3527,26 @@ class NotchiWindowsApp:
             outline_key = session_char.get("outline", "ninguno") if session_char else "ninguno"
             outline_rgb = next((o[2] for o in OUTLINE_OPTIONS if o[0] == outline_key), None)
             float_key = session_char.get("floating_item", "ninguno") if session_char else "ninguno"
-            sprite_scale = sprite_base_scale * level_mult * (1.04 if is_selected else 1.0)
+            sprite_set = session_char.get("sprite_set", "Dino") if session_char else "Dino"
+            scale_multiplier = SPRITE_SET_SCALE_DEFAULTS.get(sprite_set, 1.0)
+            sprite_scale = sprite_base_scale * level_mult * scale_multiplier * (1.04 if is_selected else 1.0)
             sprite = self.sprite_renderer.get_frame(
-                state, emotion, int(self.frame_tick),
+                state, emotion, int(sess_frame),
                 scale=sprite_scale, tint=tint_rgb, outline_rgb=outline_rgb,
+                sprite_set=sprite_set,
             )
             sprite_width = sprite.width()
             sprite_height = sprite.height()
             # Adjust y so feet stay at the same ground level regardless of size
             y_ground_offset = (1.0 - level_mult) * 20
-            sprite_y = 70 + y_ground_offset + session.sprite_y_offset * 0.22 + bob
+            effective_bob = 0.0
+            sprite_y = 70 + y_ground_offset + session.sprite_y_offset * 0.22 + effective_bob
 
             # Draw floating item above sprite bounding box (canvas-level, animation-safe)
             float_img = self.float_renderer.get(float_key, sprite_scale)
             if float_img is not None:
                 item_h = float_img.height()
-                item_bob = math.sin(self.animation_phase * 1.6 + index) * 2.5
+                item_bob = math.sin(sess_phase * 1.6) * 2.5
                 item_y = sprite_y - sprite_height / 2 - item_h / 2 - 3 + item_bob
                 canvas.create_image(int(pet_x), int(item_y), image=float_img, anchor="center")
 
@@ -2447,7 +3559,7 @@ class NotchiWindowsApp:
             )
 
             if is_selected and sparkles_active:
-                phase = self.animation_phase * 2.5
+                phase = sess_phase * 2.5
                 colors = ["#fbbf24", "#f472b6", "#60a5fa", "#34d399", "#a78bfa"]
                 for i in range(6):
                     angle = (i / 6) * 2 * math.pi + phase
@@ -2473,25 +3585,24 @@ class NotchiWindowsApp:
         if self.details_visible and focused is None:
             canvas.create_text(156, 60, text="Install the hook and start a session.", anchor="w", fill="#cbd5e1", font=("Segoe UI", 10), width=290)
 
-        if not self.details_visible and self.break_system.banner_visible():
-            # Pulsing border color
+        if self._house_win_open and not self.details_visible:
+            canvas.create_rectangle(0, height - 16, width, height, fill="#0f172a", outline="")
+            canvas.create_text(width // 2, height - 8,
+                                text="✦ Arrastrá las decoraciones para moverlas ✦",
+                                fill="#64748b", font=("Microsoft YaHei UI", 7), anchor="center")
+
+        if not self.details_visible and self.break_system.banner_visible() and self._break_overlay is None:
             pulse = 0.5 + 0.5 * math.sin(self.animation_phase * 1.2)
             r_c = int(59 + pulse * 30)
             g_c = int(130 + pulse * 40)
             b_c = 255
             outline_col = f"#{r_c:02x}{g_c:02x}{b_c:02x}"
-            bx1, by1 = 8, height - 44
+            bx1, by1 = 8, height - 48
             bx2, by2 = width - 8, height - 4
-            # Shadow
             canvas.create_rectangle(bx1 + 2, by1 + 2, bx2 + 2, by2 + 2,
                                      fill="#000000", outline="", stipple="gray50")
-            # Background panel
             canvas.create_rectangle(bx1, by1, bx2, by2,
                                      fill="#0f172a", outline=outline_col, width=2)
-            # Inner accent line
-            canvas.create_line(bx1 + 2, by1 + 14, bx2 - 2, by1 + 14,
-                                fill="#1e3a5f", width=1)
-            # Icon + message
             canvas.create_text(bx1 + 14, (by1 + by2) // 2,
                                 text="☕", font=("Segoe UI Emoji", 10), anchor="w",
                                 fill="#fbbf24")
@@ -2500,23 +3611,34 @@ class NotchiWindowsApp:
                                 fill="#e2e8f0", font=("Microsoft YaHei UI", 8, "bold"),
                                 anchor="w")
             canvas.create_text(bx1 + 34, by1 + 26,
-                                text="Clic aquí para marcar descanso",
+                                text="¿Tomamos un descanso?",
                                 fill="#64748b", font=("Microsoft YaHei UI", 7),
                                 anchor="w")
-            self._break_banner_bounds = (bx1, by1, bx2, by2)
-        else:
-            self._break_banner_bounds = None
-
-        if time.time() < self._break_confirm_until:
-            cx_w = width // 2
-            canvas.create_rectangle(cx_w - 80, height // 2 - 18,
-                                     cx_w + 80, height // 2 + 14,
+            # Accept button
+            abx1 = bx2 - 142
+            abx2 = bx2 - 76
+            aby1 = by1 + 8
+            aby2 = by2 - 8
+            canvas.create_rectangle(abx1, aby1, abx2, aby2,
                                      fill="#064e3b", outline="#34d399", width=1)
-            canvas.create_text(cx_w, height // 2 - 2,
-                                text="Que descanses  ☀",
-                                fill="#6ee7b7",
-                                font=("Microsoft YaHei UI", 9, "bold"),
-                                anchor="center")
+            canvas.create_text((abx1 + abx2) // 2, (aby1 + aby2) // 2,
+                                text="Aceptar", fill="#6ee7b7",
+                                font=("Microsoft YaHei UI", 7, "bold"), anchor="center")
+            self._break_accept_bounds = (abx1, aby1, abx2, aby2)
+            # Cancel button
+            cbx1 = bx2 - 70
+            cbx2 = bx2 - 4
+            cby1 = aby1
+            cby2 = aby2
+            canvas.create_rectangle(cbx1, cby1, cbx2, cby2,
+                                     fill="#1e293b", outline="#475569", width=1)
+            canvas.create_text((cbx1 + cbx2) // 2, (cby1 + cby2) // 2,
+                                text="Ahora no", fill="#94a3b8",
+                                font=("Microsoft YaHei UI", 7), anchor="center")
+            self._break_cancel_bounds = (cbx1, cby1, cbx2, cby2)
+        else:
+            self._break_accept_bounds = None
+            self._break_cancel_bounds = None
 
         if self._levelup_message and time.time() < self._levelup_until:
             canvas.create_text(
@@ -2570,7 +3692,7 @@ class NotchiWindowsApp:
         step = usable_width / max(1, total - 1)
         return left_margin + (step * index)
 
-    def _bob_offset(self, state: str, emotion: str) -> float:
+    def _bob_offset(self, state: str, emotion: str, phase: float) -> float:
         amplitudes = {
             "working": 3.5,
             "waiting": 1.5,
@@ -2580,7 +3702,7 @@ class NotchiWindowsApp:
             "idle": 2.0,
         }
         amplitude = amplitudes.get(state, 2.0) * self._emotion_motion_multiplier(emotion)
-        return math.sin(self.animation_phase) * amplitude
+        return math.sin(phase) * amplitude
 
     @staticmethod
     def _level_scale_mult(level: int) -> float:
@@ -2685,12 +3807,13 @@ class NotchiWindowsApp:
         self._picker_win = win
         win.title("Quien trabaja hoy?")
         win.configure(bg="#111827")
+        self._register_dialog(win)
         win.resizable(False, False)
-        win.attributes("-topmost", True)
-        x = self.root.winfo_x() + 10
-        y = self.root.winfo_y() + 40
-        height = max(160, 120 + len(chars) * 44)
+
+        x, y = self._dialog_xy()
+        height = max(200, 140 + len(chars) * 46)
         win.geometry(f"270x{height}+{x}+{y}")
+        win.focus_set()
 
         tk.Label(win, text="Quien trabaja en", fg="#64748b", bg="#111827",
                  font=("Microsoft YaHei UI", 8)).pack(pady=(14, 0))
@@ -2764,14 +3887,104 @@ class NotchiWindowsApp:
 
         win.protocol("WM_DELETE_WINDOW", on_close)
 
+    def _show_game_offer(self, level: int, char_id: str) -> None:
+        char = self.data_store.get_character(char_id)
+        if char is None:
+            return
+        win = tk.Toplevel(self.root)
+        win.title("¡Subiste de nivel!")
+        win.configure(bg="#111827")
+        self._register_dialog(win)
+        win.resizable(False, False)
+        x, y = self._dialog_xy()
+        win.geometry(f"320x150+{x}+{y}")
+
+        tk.Label(win, text=f"¡{char.get('name', 'Mascota')} llegó al nivel {level}! 🎉",
+                 fg="#f8fafc", bg="#111827",
+                 font=("Microsoft YaHei UI", 11, "bold")).pack(pady=(18, 4))
+        tk.Label(win, text="¿Querés salir a correr un poco?",
+                 fg="#94a3b8", bg="#111827",
+                 font=("Microsoft YaHei UI", 9)).pack(pady=(0, 14))
+
+        btn_row = tk.Frame(win, bg="#111827")
+        btn_row.pack()
+
+        def play() -> None:
+            win.destroy()
+            self.open_mini_game(char_id)
+
+        tk.Button(btn_row, text="¡Vamos!",
+                  command=play,
+                  bg="#2563eb", fg="white",
+                  activebackground="#1d4ed8", activeforeground="white",
+                  relief="flat", padx=12, pady=6,
+                  font=("Microsoft YaHei UI", 9)).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row, text="Ahora no",
+                  command=win.destroy,
+                  bg="#1f2937", fg="#cbd5e1",
+                  activebackground="#374151", activeforeground="#f8fafc",
+                  relief="flat", padx=12, pady=6,
+                  font=("Microsoft YaHei UI", 9)).pack(side="left")
+
+    def open_mini_game(self, char_id: str) -> None:
+        char = self.data_store.get_character(char_id)
+        if char is None:
+            return
+        house = self.data_store.get_house()
+        def on_done() -> None:
+            self.root.attributes("-topmost", True)
+        MiniGame(self.root, char, house,
+                 self.sprite_renderer, self.bg_renderer,
+                 self.data_store, on_done)
+
+    def _show_daily_greeting(self) -> None:
+        today = time.strftime("%Y-%m-%d")
+        self.data_store.set("greeted_date", today)
+
+        win = tk.Toplevel(self.root)
+        win.title("Buenos días")
+        win.configure(bg="#111827")
+        self._register_dialog(win)
+        win.resizable(False, False)
+
+        x, y = self._dialog_xy()
+        win.geometry(f"380x160+{x}+{y}")
+
+        tk.Label(win, text="¡Buenos días! 👋",
+                 fg="#f8fafc", bg="#111827",
+                 font=("Microsoft YaHei UI", 13, "bold")).pack(pady=(18, 4))
+        tk.Label(win, text="¿Qué planes tenés para hoy?",
+                 fg="#94a3b8", bg="#111827",
+                 font=("Microsoft YaHei UI", 10)).pack(pady=(0, 14))
+
+        btn_row = tk.Frame(win, bg="#111827")
+        btn_row.pack()
+
+        def open_alarms_and_close() -> None:
+            win.destroy()
+            self.open_alarms()
+
+        tk.Button(btn_row, text="Configurar alarmas",
+                  command=open_alarms_and_close,
+                  bg="#2563eb", fg="white",
+                  activebackground="#1d4ed8", activeforeground="white",
+                  relief="flat", padx=12, pady=6,
+                  font=("Microsoft YaHei UI", 9)).pack(side="left", padx=(0, 8))
+        tk.Button(btn_row, text="Ahora no",
+                  command=win.destroy,
+                  bg="#1f2937", fg="#cbd5e1",
+                  activebackground="#374151", activeforeground="#f8fafc",
+                  relief="flat", padx=12, pady=6,
+                  font=("Microsoft YaHei UI", 9)).pack(side="left")
+
     def _show_first_use_popup(self) -> None:
         win = tk.Toplevel(self.root)
         win.title("Bienvenido")
         win.configure(bg="#111827")
+        self._register_dialog(win)
         win.resizable(False, False)
-        win.attributes("-topmost", True)
-        x = self.root.winfo_x() + 10
-        y = self.root.winfo_y() + 40
+
+        x, y = self._dialog_xy()
         win.geometry(f"280x190+{x}+{y}")
         win.grab_set()
 
@@ -2780,7 +3993,7 @@ class NotchiWindowsApp:
         tk.Label(win, text="Dale un nombre a tu companero:", fg="#94a3b8",
                  bg="#111827", font=("Microsoft YaHei UI", 9)).pack(pady=(0, 8))
 
-        name_var = tk.StringVar(value="Notchi")
+        name_var = tk.StringVar(value="Mascota")
         entry = tk.Entry(win, textvariable=name_var, bg="#0f172a", fg="#f8fafc",
                          insertbackground="#f8fafc", relief="flat",
                          font=("Microsoft YaHei UI", 11), justify="center",
@@ -2803,26 +4016,27 @@ class NotchiWindowsApp:
         if self.details_visible:
             self.toggle_details()
 
-        current_level = self.xp_system.get_level()
+        current_level = self.xp_system.max_level()
         house = self.data_store.get_house()
         active_char = self.data_store.get_active_character() or {}
 
         win = tk.Toplevel(self.root)
         win.title("Tu Casa")
         win.configure(bg="#111827")
+        self._register_dialog(win)
         win.resizable(False, True)
-        win.attributes("-topmost", True)
-        x = self.root.winfo_x() + 10
-        y = self.root.winfo_y() + 40
-        win.geometry(f"350x480+{x}+{y}")
+
+        self._house_win_open = True
+        x, y = self._dialog_xy()
+        win.geometry(f"480x480+{x}+{y}")
 
         # ── Header (fixed, outside scroll) ────────────────────────────────────
         hdr = tk.Frame(win, bg="#0f172a")
         hdr.pack(fill="x")
         tk.Label(hdr, text="Tu Casa", fg="#f8fafc", bg="#0f172a",
                  font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=14, pady=10)
-        tk.Label(hdr, text=f"Lv.{current_level}", fg="#fbbf24", bg="#0f172a",
-                 font=("Microsoft YaHei UI", 10, "bold")).pack(side="right", padx=14)
+        tk.Label(hdr, text=f"Lv.{current_level} (mejor personaje)", fg="#fbbf24", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 9)).pack(side="right", padx=14)
 
         # ── Scrollable body ────────────────────────────────────────────────────
         scroll_canvas = tk.Canvas(win, bg="#111827", highlightthickness=0)
@@ -2852,7 +4066,10 @@ class NotchiWindowsApp:
             scroll_canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
 
         scroll_canvas.bind_all("<MouseWheel>", _on_mousewheel)
-        win.bind("<Destroy>", lambda _: scroll_canvas.unbind_all("<MouseWheel>"))
+        win.bind("<Destroy>", lambda e: (
+            scroll_canvas.unbind_all("<MouseWheel>"),
+            setattr(self, "_house_win_open", False),
+        ) if e.widget is win else None)
 
         def section_label(text: str) -> None:
             tk.Label(body, text=text, fg="#64748b", bg="#111827",
@@ -2867,13 +4084,16 @@ class NotchiWindowsApp:
         bg_frame = tk.Frame(body, bg="#111827")
         bg_frame.pack(fill="x", padx=14, pady=(0, 4))
         current_bg = [house.get("background", "oficina")]
+        PER_ROW_BG = 3
 
         def refresh_bg_buttons() -> None:
             for w in bg_frame.winfo_children():
                 w.destroy()
-            row = tk.Frame(bg_frame, bg="#111827")
-            row.pack(anchor="w")
-            for key, label, min_lev in BG_THEMES:
+            row: tk.Frame | None = None
+            for i, (key, label, min_lev) in enumerate(BG_THEMES):
+                if i % PER_ROW_BG == 0:
+                    row = tk.Frame(bg_frame, bg="#111827")
+                    row.pack(anchor="w", pady=(0, 2))
                 locked = current_level < min_lev
                 selected = current_bg[0] == key
                 def on_bg(k=key, lv=min_lev):
@@ -2887,7 +4107,7 @@ class NotchiWindowsApp:
                 lbl = label if not locked else f"{label}\nLv.{min_lev}"
                 tk.Button(row, text=lbl, command=on_bg, bg=bg_color, fg=fg_color,
                           activebackground="#1e293b", activeforeground="#f8fafc",
-                          relief="flat", padx=6, pady=4,
+                          relief="flat", padx=6, pady=4, width=12,
                           font=("Microsoft YaHei UI", 8),
                           state="normal" if not locked else "disabled").pack(side="left", padx=2)
 
@@ -2979,25 +4199,45 @@ class NotchiWindowsApp:
         current_level = char.get("level", 1)
 
         win = tk.Toplevel(self.root)
-        win.title(f"Personaje: {char.get('name', 'Notchi')}")
+        win.title(f"Personaje: {char.get('name', 'Mascota')}")
         win.configure(bg="#111827")
+        self._register_dialog(win)
         win.resizable(False, False)
-        x = self.root.winfo_x() + 10
-        y = self.root.winfo_y() + 40
+        x, y = self._dialog_xy()
         win.geometry(f"320x480+{x}+{y}")
-        win.attributes("-topmost", True)
+
 
         # ── Header ────────────────────────────────────────────────────────────
         hdr = tk.Frame(win, bg="#0f172a")
         hdr.pack(fill="x")
-        tk.Label(hdr, text=char.get("name", "Notchi"), fg="#f8fafc", bg="#0f172a",
+        tk.Label(hdr, text=char.get("name", "Mascota"), fg="#f8fafc", bg="#0f172a",
                  font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=14, pady=10)
         tk.Label(hdr, text=f"Lv.{current_level}", fg="#fbbf24", bg="#0f172a",
                  font=("Microsoft YaHei UI", 10, "bold")).pack(side="right", padx=14)
 
-        tk.Button(win, text="Cerrar", command=win.destroy, bg="#1f2937", fg="#cbd5e1",
+        btn_row = tk.Frame(win, bg="#111827")
+        btn_row.pack(side="bottom", pady=8)
+        tk.Button(btn_row, text="Cerrar", command=win.destroy, bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
-                  relief="flat", padx=12, pady=4).pack(side="bottom", pady=8)
+                  relief="flat", padx=12, pady=4).pack(side="left", padx=(0, 6))
+
+        def confirm_delete() -> None:
+            chars = self.data_store.get_characters()
+            if len(chars) <= 1:
+                messagebox.showwarning("No se puede borrar",
+                                       "Debe haber al menos un personaje.", parent=win)
+                return
+            if messagebox.askyesno("Borrar personaje",
+                                   f"¿Borrar a {char.get('name', 'este personaje')}?",
+                                   parent=win):
+                self.data_store.delete_character(char_id)
+                self.store.unassign_character_by_id(char_id)
+                win.destroy()
+
+        tk.Button(btn_row, text="Borrar personaje", command=confirm_delete,
+                  bg="#1f2937", fg="#ef4444",
+                  activebackground="#374151", activeforeground="#fca5a5",
+                  relief="flat", padx=12, pady=4).pack(side="left")
 
         # ── Live preview ──────────────────────────────────────────────────────
         preview_frame = tk.Frame(win, bg="#1e293b", width=120, height=120)
@@ -3015,8 +4255,11 @@ class NotchiWindowsApp:
             outline_key = ch.get("outline", "ninguno")
             outline_rgb = next((o[2] for o in OUTLINE_OPTIONS if o[0] == outline_key), None)
             float_key = ch.get("floating_item", "ninguno")
+            sprite_set = ch.get("sprite_set", "Dino")
+            preview_scale = 2.2 * SPRITE_SET_SCALE_DEFAULTS.get(ch.get("sprite_set", "Dino"), 1.0)
             sprite = self.sprite_renderer.get_frame(
-                "idle", "happy", 0, scale=2.2, tint=tint_rgb, outline_rgb=outline_rgb,
+                "idle", "happy", 0, scale=preview_scale, tint=tint_rgb, outline_rgb=outline_rgb,
+                sprite_set=sprite_set,
             )
             preview_canvas.delete("all")
             preview_canvas.create_image(60, 70, image=sprite, anchor="center")
@@ -3092,13 +4335,26 @@ class NotchiWindowsApp:
                 w.destroy()
             ch = self.data_store.get_active_character() or {}
 
+            # Sprite set
+            section_label("SPRITE (personaje visual)")
+            available = self.sprite_renderer.available_sets()
+            make_option_row(
+                [(s, s) for s in available],
+                lambda: (self.data_store.get_active_character() or {}).get("sprite_set", "Dino"),
+                lambda k: (self.data_store.update_active_character(
+                               char_id=char_id, sprite_set=k,
+                               scale_multiplier=SPRITE_SET_SCALE_DEFAULTS.get(k, 1.0)),
+                           self.sprite_renderer.invalidate()),
+                cols=3,
+            )
+
             # Tinte
             section_label("COLOR")
             make_option_row(
                 [(k, l, rgb) for k, l, rgb, _ in MASCOT_TINTS if rgb is not None or k == "original"],
                 lambda: (self.data_store.get_active_character() or {}).get("tint", "original"),
                 lambda k: (self.data_store.update_active_character(char_id=char_id, tint=k),
-                           self.sprite_renderer._cache.clear()),
+                           self.sprite_renderer.invalidate()),
                 cols=3,
             )
 
@@ -3108,7 +4364,7 @@ class NotchiWindowsApp:
                 OUTLINE_OPTIONS,
                 lambda: (self.data_store.get_active_character() or {}).get("outline", "ninguno"),
                 lambda k: (self.data_store.update_active_character(char_id=char_id, outline=k),
-                           self.sprite_renderer._cache.clear()),
+                           self.sprite_renderer.invalidate()),
                 cols=4,
             )
 
@@ -3129,15 +4385,275 @@ class NotchiWindowsApp:
         refresh_buttons()
         refresh_preview()
 
+    def open_alarms(self) -> None:
+        win = tk.Toplevel(self.root)
+        win.title("Alarmas y Descansos")
+        win.configure(bg="#111827")
+        self._register_dialog(win)
+        win.resizable(False, True)
+
+        x, y = self._dialog_xy()
+        win.geometry(f"380x460+{x}+{y}")
+
+        # ── Header ────────────────────────────────────────────────
+        hdr = tk.Frame(win, bg="#0f172a")
+        hdr.pack(fill="x")
+        today_str = time.strftime("%A %d/%m/%Y")
+        tk.Label(hdr, text="Planificación", fg="#f8fafc", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=14, pady=10)
+        tk.Label(hdr, text=today_str, fg="#64748b", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 9)).pack(side="right", padx=14)
+
+        # ── Tab bar ───────────────────────────────────────────────
+        tab_bar = tk.Frame(win, bg="#0f172a")
+        tab_bar.pack(fill="x")
+        tk.Frame(tab_bar, height=1, bg="#334155").pack(fill="x", side="bottom")
+
+        tab_alarm_btn = tk.Button(tab_bar, text="Alarmas 🔔", relief="flat",
+                                  bg="#0f172a", fg="#fbbf24", padx=14, pady=7,
+                                  font=("Microsoft YaHei UI", 9, "bold"),
+                                  activebackground="#111827", activeforeground="#fbbf24",
+                                  bd=0, highlightthickness=0)
+        tab_alarm_btn.pack(side="left")
+        tab_break_btn = tk.Button(tab_bar, text="Descansos ☕", relief="flat",
+                                  bg="#0f172a", fg="#64748b", padx=14, pady=7,
+                                  font=("Microsoft YaHei UI", 9),
+                                  activebackground="#111827", activeforeground="#94a3b8",
+                                  bd=0, highlightthickness=0)
+        tab_break_btn.pack(side="left")
+
+        # ── Content area ──────────────────────────────────────────
+        content = tk.Frame(win, bg="#111827")
+        content.pack(fill="both", expand=True)
+
+        # ── Alarmas tab ───────────────────────────────────────────
+        alarm_tab = tk.Frame(content, bg="#111827")
+
+        add_frame = tk.Frame(alarm_tab, bg="#0f172a")
+        add_frame.pack(side="bottom", fill="x")
+        tk.Frame(add_frame, height=1, bg="#334155").pack(fill="x")
+        add_inner = tk.Frame(add_frame, bg="#0f172a")
+        add_inner.pack(fill="x", padx=10, pady=8)
+        tk.Label(add_inner, text="Agregar alarma", fg="#64748b", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(0, 4))
+
+        input_row = tk.Frame(add_inner, bg="#0f172a")
+        input_row.pack(fill="x")
+
+        hour_var = tk.StringVar(value="09")
+        minute_var = tk.StringVar(value="00")
+        label_var = tk.StringVar()
+
+        tk.Label(input_row, text="H:", fg="#94a3b8", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 9)).pack(side="left")
+        tk.Spinbox(input_row, from_=0, to=23, textvariable=hour_var,
+                   format="%02.0f", width=3,
+                   bg="#1e293b", fg="#f8fafc", insertbackground="#f8fafc",
+                   relief="flat", font=("Microsoft YaHei UI", 10),
+                   buttonbackground="#334155").pack(side="left", padx=(2, 6))
+
+        tk.Label(input_row, text="M:", fg="#94a3b8", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 9)).pack(side="left")
+        tk.Spinbox(input_row,
+                   values=["00", "05", "10", "15", "20", "25", "30",
+                            "35", "40", "45", "50", "55"],
+                   textvariable=minute_var, width=3,
+                   bg="#1e293b", fg="#f8fafc", insertbackground="#f8fafc",
+                   relief="flat", font=("Microsoft YaHei UI", 10),
+                   buttonbackground="#334155").pack(side="left", padx=(2, 8))
+
+        label_entry = tk.Entry(input_row, textvariable=label_var,
+                               bg="#1e293b", fg="#f8fafc",
+                               insertbackground="#f8fafc",
+                               relief="flat", font=("Microsoft YaHei UI", 9),
+                               highlightthickness=1, highlightbackground="#334155",
+                               width=14)
+        label_entry.pack(side="left", ipady=4, padx=(0, 6))
+        label_entry.insert(0, "Etiqueta")
+
+        def _clear_placeholder(e: Any) -> None:
+            if label_var.get() == "Etiqueta":
+                label_entry.delete(0, "end")
+        label_entry.bind("<FocusIn>", _clear_placeholder)
+
+        def add_alarm_action() -> None:
+            h = str(hour_var.get()).zfill(2)
+            m = str(minute_var.get()).zfill(2)
+            lbl = label_var.get().strip()
+            if not lbl or lbl == "Etiqueta":
+                lbl = "Recordatorio"
+            self.alarm_system.add_alarm(lbl, f"{h}:{m}")
+            label_var.set("Etiqueta")
+            refresh_list()
+
+        tk.Button(input_row, text="Agregar", command=add_alarm_action,
+                  bg="#2563eb", fg="white",
+                  activebackground="#1d4ed8", activeforeground="white",
+                  relief="flat", padx=8, pady=4,
+                  font=("Microsoft YaHei UI", 9)).pack(side="left")
+
+        label_entry.bind("<Return>", lambda _e: add_alarm_action())
+
+        scroll_canvas = tk.Canvas(alarm_tab, bg="#111827", highlightthickness=0)
+        scrollbar = tk.Scrollbar(alarm_tab, orient="vertical", command=scroll_canvas.yview)
+        scroll_canvas.configure(yscrollcommand=scrollbar.set)
+        scrollbar.pack(side="right", fill="y")
+        scroll_canvas.pack(side="left", fill="both", expand=True)
+
+        list_frame = tk.Frame(scroll_canvas, bg="#111827")
+        list_id = scroll_canvas.create_window((0, 0), window=list_frame, anchor="nw")
+
+        list_frame.bind("<Configure>", lambda _e: scroll_canvas.configure(
+            scrollregion=scroll_canvas.bbox("all")))
+        scroll_canvas.bind("<Configure>", lambda e: scroll_canvas.itemconfig(
+            list_id, width=e.width))
+        scroll_canvas.bind_all("<MouseWheel>",
+            lambda e: scroll_canvas.yview_scroll(int(-1 * e.delta / 120), "units"))
+        win.bind("<Destroy>", lambda e: scroll_canvas.unbind_all("<MouseWheel>")
+                 if e.widget is win else None)
+
+        def refresh_list() -> None:
+            for w in list_frame.winfo_children():
+                w.destroy()
+            alarms = self.alarm_system.get_alarms()
+            today = time.strftime("%Y-%m-%d")
+            if not alarms:
+                tk.Label(list_frame, text="No hay alarmas configuradas.",
+                         fg="#475569", bg="#111827",
+                         font=("Microsoft YaHei UI", 9)).pack(pady=20)
+                return
+            for alarm in alarms:
+                row = tk.Frame(list_frame, bg="#1e293b",
+                               highlightthickness=1, highlightbackground="#334155")
+                row.pack(fill="x", padx=10, pady=3, ipady=4)
+
+                triggered = alarm.get("triggered_date") == today
+                snoozed = time.time() < float(alarm.get("snooze_until", 0.0))
+                enabled = alarm.get("enabled", True)
+
+                time_lbl = alarm.get("time", "--:--")
+                if triggered:
+                    time_lbl = "✓ " + time_lbl
+                time_color = "#94a3b8" if (not enabled or triggered) else "#fbbf24"
+                tk.Label(row, text=time_lbl, fg=time_color, bg="#1e293b",
+                         font=("Microsoft YaHei UI", 10, "bold"),
+                         width=8, anchor="w").pack(side="left", padx=(8, 4))
+
+                lbl_text = alarm.get("label", "")
+                if snoozed:
+                    lbl_text = f"💤 {lbl_text}"
+                lbl_color = "#475569" if (not enabled or triggered) else "#e2e8f0"
+                tk.Label(row, text=lbl_text, fg=lbl_color, bg="#1e293b",
+                         font=("Microsoft YaHei UI", 9),
+                         anchor="w").pack(side="left", fill="x", expand=True, padx=4)
+
+                toggle_text = "ON" if enabled else "OFF"
+                toggle_bg = "#064e3b" if enabled else "#1f2937"
+                toggle_fg = "#34d399" if enabled else "#64748b"
+                tk.Button(row, text=toggle_text,
+                          command=lambda aid=alarm["id"]: (
+                              self.alarm_system.toggle_alarm(aid), refresh_list()),
+                          bg=toggle_bg, fg=toggle_fg,
+                          activebackground="#1e293b", activeforeground="#f8fafc",
+                          relief="flat", padx=6, pady=2,
+                          font=("Microsoft YaHei UI", 8)).pack(side="right", padx=(0, 4))
+
+                tk.Button(row, text="✕",
+                          command=lambda aid=alarm["id"]: (
+                              self.alarm_system.remove_alarm(aid), refresh_list()),
+                          bg="#1f2937", fg="#ef4444",
+                          activebackground="#374151", activeforeground="#fca5a5",
+                          relief="flat", padx=6, pady=2,
+                          font=("Microsoft YaHei UI", 8)).pack(side="right", padx=(0, 2))
+
+        refresh_list()
+
+        # ── Descansos tab ─────────────────────────────────────────
+        break_tab = tk.Frame(content, bg="#111827")
+
+        def brk_section(text: str) -> None:
+            tk.Label(break_tab, text=text, fg="#64748b", bg="#111827",
+                     font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=16, pady=(14, 2))
+
+        def brk_row() -> tk.Frame:
+            f = tk.Frame(break_tab, bg="#111827")
+            f.pack(anchor="w", padx=24, pady=2)
+            return f
+
+        def brk_menu(parent: tk.Frame, var: tk.StringVar, options: list[str]) -> tk.OptionMenu:
+            m = tk.OptionMenu(parent, var, *options)
+            m.configure(bg="#0f172a", fg="#f8fafc", activebackground="#1e293b",
+                        activeforeground="#f8fafc", relief="flat", bd=0,
+                        highlightthickness=0, padx=6)
+            m["menu"].configure(bg="#0f172a", fg="#f8fafc", activebackground="#1e293b")
+            return m
+
+        brk_section("RECORDATORIOS DE DESCANSO")
+        break_var = tk.BooleanVar(value=bool(self.data_store.get("break_enabled")))
+        def on_break(*_: Any) -> None:
+            self.data_store.set("break_enabled", break_var.get())
+        tk.Checkbutton(break_tab, text="Activar recordatorios de descanso",
+                       variable=break_var, command=on_break,
+                       bg="#111827", fg="#f8fafc", activebackground="#111827",
+                       activeforeground="#f8fafc", selectcolor="#0f172a",
+                       relief="flat").pack(anchor="w", padx=24)
+
+        interval_map = {"15 min": 15, "30 min": 30, "50 min": 50, "90 min": 90}
+        cur_min = int(self.data_store.get("break_interval_minutes"))
+        interval_var = tk.StringVar(value=f"{cur_min} min")
+        def on_interval(*_: Any) -> None:
+            self.data_store.set("break_interval_minutes", interval_map.get(interval_var.get(), 50))
+        interval_var.trace_add("write", on_interval)
+        r1 = brk_row()
+        tk.Label(r1, text="Intervalo de trabajo:", fg="#cbd5e1", bg="#111827",
+                 font=("Microsoft YaHei UI", 9)).pack(side="left")
+        brk_menu(r1, interval_var, list(interval_map.keys())).pack(side="left", padx=(6, 0))
+
+        duration_map = {"3 min": 3, "5 min": 5, "10 min": 10, "15 min": 15}
+        cur_dur = int(self.data_store.get("break_duration_minutes"))
+        closest_dur = min(duration_map, key=lambda k: abs(duration_map[k] - cur_dur))
+        duration_var = tk.StringVar(value=closest_dur)
+        def on_duration(*_: Any) -> None:
+            self.data_store.set("break_duration_minutes", duration_map.get(duration_var.get(), 5))
+        duration_var.trace_add("write", on_duration)
+        r_dur = brk_row()
+        tk.Label(r_dur, text="Duración del descanso:", fg="#cbd5e1", bg="#111827",
+                 font=("Microsoft YaHei UI", 9)).pack(side="left")
+        brk_menu(r_dur, duration_var, list(duration_map.keys())).pack(side="left", padx=(6, 0))
+
+        # ── Tab switching ─────────────────────────────────────────
+        def show_alarm_tab() -> None:
+            break_tab.pack_forget()
+            alarm_tab.pack(fill="both", expand=True)
+            tab_alarm_btn.configure(bg="#111827", fg="#fbbf24", font=("Microsoft YaHei UI", 9, "bold"))
+            tab_break_btn.configure(bg="#0f172a", fg="#64748b", font=("Microsoft YaHei UI", 9))
+
+        def show_break_tab() -> None:
+            alarm_tab.pack_forget()
+            break_tab.pack(fill="both", expand=True)
+            tab_break_btn.configure(bg="#111827", fg="#94a3b8", font=("Microsoft YaHei UI", 9, "bold"))
+            tab_alarm_btn.configure(bg="#0f172a", fg="#64748b", font=("Microsoft YaHei UI", 9))
+
+        tab_alarm_btn.configure(command=show_alarm_tab)
+        tab_break_btn.configure(command=show_break_tab)
+
+        show_alarm_tab()
+
+        # ── Close button ──────────────────────────────────────────
+        tk.Button(win, text="Cerrar", command=win.destroy,
+                  bg="#1f2937", fg="#cbd5e1",
+                  activebackground="#374151", activeforeground="#f8fafc",
+                  relief="flat", padx=12, pady=4).pack(side="bottom", pady=8)
+
     def open_settings(self) -> None:
         win = tk.Toplevel(self.root)
         win.title("Configuracion")
         win.configure(bg="#111827")
+        self._register_dialog(win)
         win.resizable(False, False)
-        win.attributes("-topmost", True)
-        x = self.root.winfo_x() + 10
-        y = self.root.winfo_y() + 40
-        win.geometry(f"270x240+{x}+{y}")
+
+        x, y = self._dialog_xy()
+        win.geometry(f"270x320+{x}+{y}")
 
         def section(text: str) -> None:
             tk.Label(win, text=text, fg="#64748b", bg="#111827",
@@ -3167,27 +4683,6 @@ class NotchiWindowsApp:
                        activeforeground="#f8fafc", selectcolor="#0f172a",
                        relief="flat").pack(anchor="w", padx=24)
 
-        # Breaks
-        section("DESCANSOS")
-        break_var = tk.BooleanVar(value=bool(self.data_store.get("break_enabled")))
-        def on_break(*_: Any) -> None:
-            self.data_store.set("break_enabled", break_var.get())
-        tk.Checkbutton(win, text="Recordatorios activados", variable=break_var,
-                       command=on_break, bg="#111827", fg="#f8fafc",
-                       activebackground="#111827", activeforeground="#f8fafc",
-                       selectcolor="#0f172a", relief="flat").pack(anchor="w", padx=24)
-
-        interval_map = {"15 min": 15, "30 min": 30, "50 min": 50, "90 min": 90}
-        cur_min = int(self.data_store.get("break_interval_minutes"))
-        interval_var = tk.StringVar(value=f"{cur_min} min")
-        def on_interval(*_: Any) -> None:
-            self.data_store.set("break_interval_minutes", interval_map.get(interval_var.get(), 50))
-        interval_var.trace_add("write", on_interval)
-        r1 = row_frame()
-        tk.Label(r1, text="Intervalo:", fg="#cbd5e1", bg="#111827",
-                 font=("Microsoft YaHei UI", 9)).pack(side="left")
-        styled_menu(r1, interval_var, list(interval_map.keys())).pack(side="left", padx=(6, 0))
-
         # Appearance
         section("APARIENCIA")
         opacity_map = {"60%": 0.6, "80%": 0.8, "100%": 1.0}
@@ -3204,6 +4699,72 @@ class NotchiWindowsApp:
                  font=("Microsoft YaHei UI", 9)).pack(side="left")
         styled_menu(r2, opacity_var, list(opacity_map.keys())).pack(side="left", padx=(6, 0))
 
+        # Hook de Claude Code
+        section("INTEGRACIÓN CLAUDE CODE")
+        def reinstall_hook() -> None:
+            ok, msg = self.installer.install()
+            if ok:
+                messagebox.showinfo("Hook instalado", msg, parent=win)
+            else:
+                messagebox.showerror("Error", msg, parent=win)
+        hook_status = "✓ Instalado" if self.installer.is_installed() else "✗ No instalado"
+        tk.Label(win, text=f"Estado: {hook_status}",
+                 fg="#3fb950" if self.installer.is_installed() else "#f85149",
+                 bg="#111827", font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=24)
+        tk.Button(win, text="Instalar / Reinstalar hook",
+                  command=reinstall_hook,
+                  bg="#1f2937", fg="#cbd5e1",
+                  activebackground="#374151", activeforeground="#f8fafc",
+                  relief="flat", padx=8, pady=4).pack(anchor="w", padx=24, pady=(2, 0))
+
+        # Hook de Codex
+        section("INTEGRACIÓN CODEX (OpenAI)")
+        def reinstall_codex_hook() -> None:
+            ok, msg = self.codex_installer.install()
+            if ok:
+                messagebox.showinfo("Hook instalado", msg, parent=win)
+            else:
+                messagebox.showerror("Error", msg, parent=win)
+        codex_ok = self.codex_installer.is_installed()
+        codex_status = "✓ Instalado" if codex_ok else "✗ No instalado"
+        codex_available = (Path.home() / ".codex").exists()
+        codex_hint = "" if codex_available else " (Codex no detectado)"
+        tk.Label(win, text=f"Estado: {codex_status}{codex_hint}",
+                 fg="#3fb950" if codex_ok else "#f85149",
+                 bg="#111827", font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=24)
+        tk.Button(win, text="Instalar / Reinstalar hook",
+                  command=reinstall_codex_hook,
+                  bg="#1f2937", fg="#cbd5e1",
+                  activebackground="#374151", activeforeground="#f8fafc",
+                  relief="flat", padx=8, pady=4).pack(anchor="w", padx=24, pady=(2, 0))
+
+        # Acceso directo
+        section("ACCESO DIRECTO")
+        def create_shortcut() -> None:
+            vbs_src = self.base_dir / "Iniciar Mascota.vbs"
+            if not vbs_src.exists():
+                messagebox.showerror("Error", "No se encontró 'Iniciar Mascota.vbs'", parent=win)
+                return
+            desktop = Path.home() / "Desktop"
+            if not desktop.exists():
+                desktop = Path.home() / "OneDrive" / "Escritorio"
+            if not desktop.exists():
+                desktop = Path.home() / "OneDrive" / "Desktop"
+            if not desktop.exists():
+                messagebox.showerror("Error", "No se encontró la carpeta Desktop.", parent=win)
+                return
+            try:
+                shutil.copy(str(vbs_src), str(desktop / "Iniciar Mascota.vbs"))
+                messagebox.showinfo("Listo", f"Acceso directo creado en:\n{desktop}", parent=win)
+            except Exception as exc:
+                messagebox.showerror("Error", str(exc), parent=win)
+
+        tk.Button(win, text="Crear acceso directo en Escritorio",
+                  command=create_shortcut,
+                  bg="#1f2937", fg="#cbd5e1",
+                  activebackground="#374151", activeforeground="#f8fafc",
+                  relief="flat", padx=8, pady=4).pack(anchor="w", padx=24, pady=(2, 0))
+
         tk.Button(win, text="Cerrar", command=win.destroy, bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=12, pady=4).pack(side="bottom", pady=10)
@@ -3213,6 +4774,14 @@ class NotchiWindowsApp:
         self.render()
         self.animate()
         self.root.mainloop()
+
+    def _register_dialog(self, win: tk.Toplevel) -> None:
+        win.attributes("-topmost", True)
+        win.lift()
+
+    def _dialog_xy(self) -> tuple[int, int]:
+        self.root.update_idletasks()
+        return self.root.winfo_x(), self.root.winfo_y() + self.root.winfo_height() + 4
 
     def shutdown(self) -> None:
         self.data_store.set("window_x", self.root.winfo_x())
@@ -3225,5 +4794,5 @@ class NotchiWindowsApp:
 
 
 if __name__ == "__main__":
-    app = NotchiWindowsApp()
+    app = MascotaApp()
     app.run()

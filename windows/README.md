@@ -1,48 +1,45 @@
-# Notchi for Windows
+# pixel-companion — Windows
 
-This folder contains the Windows desktop release of Notchi.
-
-## Features
-
-- Auto-installs a Claude Code hook on startup
-- Auto-launches the app when Claude Code emits an event and Notchi is not already running
-- Receives live Claude Code events over `127.0.0.1:8765`
-- Shows one animated mascot per active Claude Code session
-- Supports automatic state switching:
-  - `idle`
-  - `working`
-  - `waiting`
-  - `compacting`
-  - `sleeping`
-- Supports automatic emotion switching:
-  - `neutral`
-  - `happy`
-  - `sad`
-  - `sob`
-- Supports compact hide mode and expandable detail mode
+This folder contains the Windows desktop app and its hook scripts.
 
 ## Run
 
 ```powershell
-git clone https://github.com/AptatoX/notchi-for-windows.git
-cd notchi-for-windows/windows
-python -m pip install -r ../requirements.txt
+git clone https://github.com/Emi-Dz/pixel-companion.git
+cd pixel-companion/windows
+pip install -r ../requirements.txt
 python app.py
 ```
 
-## Interaction
+## Files
 
-- Launch: starts in hide mode
-- Double-click a mascot: toggle between hide and detail for that session
-- Multiple Claude Code sessions: each session gets its own mascot
+| File | Purpose |
+|---|---|
+| `app.py` | Main application |
+| `mascota-hook.ps1` | Claude Code hook payload (auto-installed) |
+| `codex-hook.ps1` | Codex hook payload (auto-installed) |
+| `Iniciar Mascota.vbs` | Helper to create a desktop shortcut |
+| `assets/sprites/Dino/` | Dino sprite sheets for all 4 states |
+| `sounds/` | Sound effects used by the app and mini-game |
+
+## Hooks
+
+On first launch, the app automatically installs:
+
+- `~/.claude/hooks/mascota-hook.ps1` — Claude Code hook
+- `~/.codex/mascota-codex-hook.ps1` + entry in `~/.codex/hooks.json` — Codex hook
+
+Both hooks connect to `127.0.0.1:8765` and auto-launch the app if it's not running.
+
+To reinstall hooks manually, open **Settings → Reinstall hooks** from the app.
+
+## Data
+
+User data is stored at `%USERPROFILE%\.mascota\mascota_data.json`.
+
+Legacy data from `.pixel-mascot` is automatically migrated on first launch.
 
 ## Notes
 
-- The Windows app is self-contained and does not depend on the original Xcode project.
-- It uses PowerShell hooks and a local TCP listener instead of the macOS Unix socket flow.
-- Bundled sprite sheets live under `windows/assets/sprites`.
-
-## Attribution
-
-- Based on [sk-ruban/notchi](https://github.com/sk-ruban/notchi)
-- Original sprite assets and concept remain credited to the upstream project and its authors
+- Only one instance runs at a time (enforced via Windows mutex).
+- The app minimizes to a small window on startup; it does not use the system tray.

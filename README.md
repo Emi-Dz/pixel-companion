@@ -1,74 +1,195 @@
-# Notchi for Windows
+<div align="center">
 
-A Windows desktop companion inspired by and ported from [sk-ruban/notchi](https://github.com/sk-ruban/notchi), built for Claude Code.
+<img src="assets/preview.gif" alt="Pixel Companion — Working, Idle, Waiting, Sleeping" />
 
-This repository is now a Windows-only release. It keeps the original pixel mascot and sprite sheets, but adapts the app to Windows with a small always-on-top overlay, PowerShell hooks, and local event listening.
+# pixel-companion
 
-## Quick Look
+**A pixel mascot that lives on your Windows desktop and reacts to your coding sessions.**
 
-<p align="center">
-  <img src="assets/windows-mascots.gif" alt="Animated mascots" width="640">
-</p>
+Works with **Claude Code** and **Codex** &nbsp;·&nbsp; **Windows only**
 
-Animated preview of `happy`, `sad`, `waiting`, and `sleeping` state transitions.
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://python.org)
+[![Windows](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&logo=windows)](https://github.com/Emi-Dz/pixel-companion)
+[![MIT License](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
 
-## What It Does
+</div>
 
-- Reacts to Claude Code activity in real time
-- Shows one sprite per Claude Code session
-- Uses bundled Notchi sprite animations adapted from the upstream project
-- Switches between `idle`, `working`, `waiting`, `compacting`, and `sleeping`
-- Switches emotions between `neutral`, `happy`, `sad`, and `sob`
-- Lets you hide to a compact mascot-only view or expand into a detail panel
+---
 
-## Current Status
+Pixel Companion sits quietly on your screen while you work. When you send a prompt to Claude or Codex, Dino gets to work. When the agent is waiting for your approval, Dino waits too. When you step away, Dino falls asleep.
 
-The Windows port is usable, but it is still not a full 1:1 port of the original macOS app.
+It's not a productivity tool. It's a companion.
 
-Implemented today:
+---
 
-- Windows hook installer for Claude Code
-- Hook-triggered auto-launch when Claude Code activity starts
-- Local TCP event listener
-- Multi-session sprite rendering
-- Detail panel with recent prompt, reply, and activity info
-- Automatic state and emotion switching
-- Bundled sprite-sheet assets for the Windows app
+## States
 
-Not ported yet:
+Dino switches states automatically based on what your session is doing.
 
-- exact notch-shaped macOS UI
-- Sparkle-style auto-updates
-- exact visual parity with the native Swift app
+| State | When |
+|---|---|
+| **Working** | Claude or Codex is actively running |
+| **Idle** | No active session |
+| **Waiting** | The agent is waiting for your approval |
+| **Sleeping** | You've been away for a while |
 
-## Run
+---
+
+## Scenes
+
+Six background scenes unlock as Dino levels up.
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/oficina.png" width="260" alt="Oficina" /><br/><sub>Office</sub></td>
+    <td align="center"><img src="assets/bosque.png" width="260" alt="Bosque" /><br/><sub>Forest</sub></td>
+    <td align="center"><img src="assets/montañas.png" width="260" alt="Montañas" /><br/><sub>Mountains</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="assets/noche.png" width="260" alt="Noche" /><br/><sub>Night</sub></td>
+    <td align="center"><img src="assets/playa.png" width="260" alt="Playa" /><br/><sub>Beach</sub></td>
+    <td align="center"><img src="assets/espacio.png" width="260" alt="Espacio" /><br/><sub>Space</sub></td>
+  </tr>
+</table>
+
+---
+
+## Customization
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/personaje.png" width="380" alt="Character editor" /><br/><sub>Character editor — tint, outline, accessories, decorations</sub></td>
+    <td align="center"><img src="assets/alarma.png" width="380" alt="Alarms and breaks" /><br/><sub>Alarms and break reminders</sub></td>
+  </tr>
+</table>
+
+- **Character** — tint color, outline, floating accessories (crown, star, halo, lightning, heart, note, zzz), draggable decorations
+- **Scene** — 10 grass color themes, 6 unlockable backgrounds
+- **Alarms** — named alarms with snooze, scheduled to the minute
+- **Breaks** — automatic reminders at a configurable interval and duration
+
+---
+
+## Features
+
+**Companion**
+- Reacts in real time to Claude Code and Codex activity
+- Auto-installs the hooks on first launch — nothing to configure manually
+- Auto-launches when a hook event arrives, even if the app was closed
+- Compact window that stays out of your way
+
+**Productivity**
+- Break reminders with configurable interval and duration
+- Named alarms with snooze
+- XP system — Dino gains experience as you work and levels up over time
+
+**Mini-game**
+
+<img src="assets/juego.png" alt="Dino runner mini-game" width="600" />
+
+Unlocks when Dino levels up. Jump over obstacles, collect meters, beat your high score.
+
+---
+
+## Installation
+
+### Requirements
+
+- Windows 10 or 11
+- Python 3.10 or later
+- [Claude Code](https://claude.ai/code) and/or [Codex](https://github.com/openai/codex) installed
+
+### Run
 
 ```powershell
-git clone https://github.com/AptatoX/notchi-for-windows.git
-cd notchi-for-windows/windows
-python -m pip install -r ../requirements.txt
+git clone https://github.com/Emi-Dz/pixel-companion.git
+cd pixel-companion/windows
+pip install -r ../requirements.txt
 python app.py
 ```
 
-On launch, the app starts in hide mode and attempts to install the Claude Code hook automatically.
+On first launch, Pixel Companion installs the event hooks for Claude Code and Codex automatically, then minimizes to the side of your screen.
 
-More Windows-specific notes are in [windows/README.md](windows/README.md).
+> **Note:** You can add `windows/Iniciar Mascota.vbs` as a startup shortcut so Dino is always ready when you open your computer.
+
+---
+
+## How It Works
+
+Pixel Companion listens on `127.0.0.1:8765` for local hook events. Both Claude Code and Codex call a small PowerShell script on every event, which forwards the payload to the app.
+
+### Claude Code hook
+
+Installed automatically into `~/.claude/hooks/`. Fires on:
+
+`UserPromptSubmit` · `PreToolUse` · `PostToolUse` · `PermissionRequest` · `PreCompact` · `Stop` · `SubagentStop` · `SessionEnd`
+
+### Codex hook
+
+Installed automatically into `~/.codex/hooks.json`. Fires on:
+
+`UserPromptSubmit` · `SessionStart` · `PreToolUse` · `PostToolUse` · `PermissionRequest` · `Stop`
+
+If the app is not running when a hook fires, the script auto-launches it and retries the connection.
+
+---
+
+## XP System
+
+Dino earns XP as you work:
+
+| Event | XP |
+|---|---|
+| Tool completes (`PostToolUse` / `SubagentStop`) | +3 |
+| Session stops (`Stop`) | +3 |
+| Session ends (`SessionEnd`) | +2 |
+
+Every 300 XP = 1 level. As Dino levels up, it literally grows — starting at half size (level 1) and reaching full size at level 20. Higher levels also unlock background scenes.
+
+---
 
 ## Project Structure
 
-- [windows/](windows/README.md): Windows app, hook, and bundled sprite assets
-- [scripts/](scripts): helper scripts for Windows media generation and cleanup
+```
+pixel-companion/
+├── windows/
+│   ├── app.py                        Main application
+│   ├── mascota-hook.ps1              Claude Code hook payload
+│   ├── codex-hook.ps1                Codex hook payload
+│   ├── Iniciar Mascota.vbs           Desktop shortcut helper
+│   ├── assets/sprites/Dino/          Dino sprite sheets (4 states)
+│   └── sounds/                       Sound effects
+├── scripts/
+│   └── generate_windows_media.py     Generates preview GIF from sprites
+├── assets/                           Screenshots and preview GIF
+├── requirements.txt
+├── UPSTREAM.md
+└── LICENSE
+```
 
-## Attribution
+---
 
-This project is based on the original [sk-ruban/notchi](https://github.com/sk-ruban/notchi) project.
+## Generate the Preview GIF
 
-Credits to the original authors for:
+The `assets/preview.gif` at the top is generated from the actual sprites:
 
-- the app concept
-- sprite art and animation
-- the original macOS implementation and interaction design
+```powershell
+cd pixel-companion
+pip install Pillow
+python scripts/generate_windows_media.py
+```
+
+---
+
+## Credits
+
+- **[sk-ruban/notchi](https://github.com/sk-ruban/notchi)** — original concept, interaction model, and companion design. This project is a Windows port built on that foundation.
+- **[Arks](https://arks.itch.io/dino-characters)** — Dino character sprites
+
+See [UPSTREAM.md](UPSTREAM.md) for full attribution notes.
+
+---
 
 ## License
 
-MIT. Please also see the original upstream repository for its history and attribution.
+MIT. See [LICENSE](LICENSE).

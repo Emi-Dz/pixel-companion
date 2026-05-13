@@ -6,8 +6,8 @@ from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parent.parent
-ASSET_ROOT = ROOT / "windows" / "assets" / "sprites"
-OUTPUT_GIF = ROOT / "assets" / "windows-mascots.gif"
+SPRITE_ROOT = ROOT / "windows" / "assets" / "sprites" / "Dino"
+OUTPUT_GIF = ROOT / "assets" / "preview.gif"
 
 CANVAS_SIZE = (640, 260)
 SPRITE_SCALE = 2.0
@@ -17,33 +17,31 @@ FRAME_DURATION_MS = 120
 SCENES = [
     {
         "state": "working",
-        "emotion": "happy",
-        "title": "Happy",
-        "subtitle": "Claude is actively working on a change",
+        "title": "Working",
+        "subtitle": "Claude is actively running",
         "accent": "#f59e0b",
     },
     {
         "state": "idle",
-        "emotion": "sad",
-        "title": "Sad",
-        "subtitle": "A broken prompt leaves the mascot discouraged",
+        "title": "Idle",
+        "subtitle": "No active session",
         "accent": "#60a5fa",
     },
     {
         "state": "waiting",
-        "emotion": "neutral",
         "title": "Waiting",
-        "subtitle": "The session pauses for permission or input",
+        "subtitle": "Waiting for your approval",
         "accent": "#34d399",
     },
     {
         "state": "sleeping",
-        "emotion": "neutral",
         "title": "Sleeping",
-        "subtitle": "Long idle sessions slowly drift to sleep",
+        "subtitle": "You've been away a while",
         "accent": "#c084fc",
     },
 ]
+
+STATE_CHIPS = ["working", "idle", "waiting", "sleeping"]
 
 
 def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
@@ -58,30 +56,17 @@ def _font(size: int, bold: bool = False) -> ImageFont.ImageFont:
     return ImageFont.load_default()
 
 
-def _sprite_name_for(state: str, emotion: str) -> str:
-    options = [f"{state}_{emotion}"]
-    if emotion == "sob":
-        options.append(f"{state}_sad")
-    options.append(f"{state}_neutral")
-    for name in options:
-        if (ASSET_ROOT / f"{name}.imageset" / "sprite_sheet.png").exists():
-            return name
-    return f"{state}_neutral"
-
-
-def _load_frame(state: str, emotion: str, frame_index: int) -> Image.Image:
-    sprite_name = _sprite_name_for(state, emotion)
-    path = ASSET_ROOT / f"{sprite_name}.imageset" / "sprite_sheet.png"
+def _load_frame(state: str, frame_index: int) -> Image.Image:
+    path = SPRITE_ROOT / f"{state}_neutral.imageset" / "sprite_sheet.png"
     sheet = Image.open(path).convert("RGBA")
-    columns = 5 if state == "compacting" else 6
-    frame_width = sheet.width // columns
+    frame_width = sheet.width // 6
     frame = sheet.crop((frame_index * frame_width, 0, (frame_index + 1) * frame_width, sheet.height))
     alpha_box = frame.getchannel("A").getbbox()
     if alpha_box is not None:
-        left, top, right, bottom = alpha_box
-        frame = frame.crop((max(0, left - 2), max(0, top - 2), min(frame.width, right + 2), min(frame.height, bottom + 2)))
-    scaled_size = (max(48, int(frame.width * SPRITE_SCALE)), max(48, int(frame.height * SPRITE_SCALE)))
-    return frame.resize(scaled_size, Image.Resampling.NEAREST)
+        l, t, r, b = alpha_box
+        frame = frame.crop((max(0, l - 2), max(0, t - 2), min(frame.width, r + 2), min(frame.height, b + 2)))
+    scaled = (max(48, int(frame.width * SPRITE_SCALE)), max(48, int(frame.height * SPRITE_SCALE)))
+    return frame.resize(scaled, Image.Resampling.NEAREST)
 
 
 def _background(accent: str) -> Image.Image:
@@ -98,8 +83,7 @@ def _background(accent: str) -> Image.Image:
 
 
 def _draw_grass_band(draw: ImageDraw.ImageDraw, width: int, height: int) -> None:
-    left = 144
-    right = width - 120
+    left, right = 144, width - 120
     base_y = height - 52
     draw.ellipse((left + 22, base_y - 2, right - 22, base_y + 16), fill="#0b1020")
     draw.ellipse((left, base_y - 14, right, base_y + 8), fill="#5d7c67")
@@ -112,18 +96,17 @@ def _draw_scene_labels(draw: ImageDraw.ImageDraw, scene: dict[str, str]) -> None
     label_font = _font(28, bold=True)
     small_font = _font(12)
 
-    draw.text((48, 38), "Notchi for Windows", fill="#f8fafc", font=title_font)
-    draw.text((196, 40), "Animated Claude Code companion for Windows", fill="#8fb2d8", font=subtitle_font)
+    draw.text((48, 38), "pixel-companion", fill="#f8fafc", font=title_font)
+    draw.text((196, 40), "Desktop companion for Claude Code and Codex", fill="#8fb2d8", font=subtitle_font)
     draw.text((48, 88), scene["title"], fill="#ffffff", font=label_font)
     draw.text((48, 128), scene["subtitle"], fill="#b9c8dc", font=subtitle_font)
 
-    chips = ["happy", "sad", "waiting", "sleeping"]
     x = 48
-    for chip in chips:
-        active = chip == scene["title"].lower()
+    for chip in STATE_CHIPS:
+        active = chip == scene["state"]
         fill = scene["accent"] if active else "#101c31"
         text_fill = "#0b1526" if active else "#94a3b8"
-        chip_width = 96 if chip != "sleeping" else 108
+        chip_width = 96
         draw.rounded_rectangle((x, 170, x + chip_width, 198), radius=14, fill=fill)
         draw.text((x + 16, 176), chip.title(), fill=text_fill, font=small_font)
         x += chip_width + 10
@@ -135,17 +118,10 @@ def _compose_frame(scene: dict[str, str], frame_index: int) -> Image.Image:
     _draw_scene_labels(draw, scene)
     _draw_grass_band(draw, *CANVAS_SIZE)
 
-    frame_count = 5 if scene["state"] == "compacting" else 6
-    sprite = _load_frame(scene["state"], scene["emotion"], frame_index % frame_count)
-    bob_amplitude = {
-        "working": 7,
-        "idle": 4,
-        "waiting": 3,
-        "sleeping": 1,
-    }.get(scene["state"], 3)
+    sprite = _load_frame(scene["state"], frame_index % 6)
+    bob_amplitude = {"working": 7, "idle": 4, "waiting": 3, "sleeping": 1}.get(scene["state"], 3)
     bob = ((frame_index % 6) - 2.5) * bob_amplitude / 6
-    sprite_x = 486
-    sprite_y = 164 + int(bob)
+    sprite_x, sprite_y = 486, 164 + int(bob)
     image.alpha_composite(sprite, (int(sprite_x - sprite.width / 2), int(sprite_y - sprite.height / 2)))
     return image
 
@@ -165,6 +141,7 @@ def build_gif() -> None:
         loop=0,
         disposal=2,
     )
+    print(f"GIF saved to {OUTPUT_GIF}")
 
 
 if __name__ == "__main__":
