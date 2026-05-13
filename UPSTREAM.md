@@ -28,4 +28,4 @@ Licensed for use under the terms provided on the asset page. The sprite sheets a
 
 ## License
 
-This project is released under the MIT License. See [LICENSE](LICENSE).
+This project is released under the GNU General Public License v3.0. See [LICENSE](LICENSE).

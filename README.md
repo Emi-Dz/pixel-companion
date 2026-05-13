@@ -10,7 +10,7 @@ Works with **Claude Code** and **Codex** &nbsp;·&nbsp; **Windows only**
 
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?style=flat-square)](https://python.org)
 [![Windows](https://img.shields.io/badge/platform-Windows-0078d4?style=flat-square&logo=windows)](https://github.com/Emi-Dz/pixel-companion)
-[![MIT License](https://img.shields.io/badge/license-MIT-22c55e?style=flat-square)](LICENSE)
+[![GPL-3.0 License](https://img.shields.io/badge/license-GPL--3.0-22c55e?style=flat-square)](LICENSE)
 
 </div>
 
@@ -181,4 +181,4 @@ See [UPSTREAM.md](UPSTREAM.md) for full attribution notes.
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+GPL-3.0. See [LICENSE](LICENSE).
