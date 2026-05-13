@@ -169,18 +169,6 @@ pixel-companion/
 
 ---
 
-## Generate the Preview GIF
-
-The `assets/preview.gif` at the top is generated from the actual sprites:
-
-```powershell
-cd pixel-companion
-pip install Pillow
-python scripts/generate_windows_media.py
-```
-
----
-
 ## Credits
 
 - **[sk-ruban/notchi](https://github.com/sk-ruban/notchi)** — original macOS concept, interaction model, and companion design
