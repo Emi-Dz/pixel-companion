@@ -2781,7 +2781,10 @@ class MascotaApp:
         wx = self.data_store.get("window_x")
         wy = self.data_store.get("window_y")
         if wx >= 0 and wy >= 0:
-            self.root.geometry(f"+{wx}+{wy}")
+            sw = self.root.winfo_screenwidth()
+            sh = self.root.winfo_screenheight()
+            if wx < sw and wy < sh:
+                self.root.geometry(f"+{wx}+{wy}")
         opacity = float(self.data_store.get("opacity"))
         if opacity < 1.0:
             self.root.wm_attributes("-alpha", opacity)
