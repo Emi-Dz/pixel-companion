@@ -39,6 +39,19 @@ User data is stored at `%USERPROFILE%\.mascota\mascota_data.json`.
 
 Legacy data from `.pixel-mascot` is automatically migrated on first launch.
 
+## Background visibility
+
+The toolbar includes a **BG** button that toggles the house scene (background, decorations, and floor) on or off:
+
+- **BG on** (button lit blue) — the full scene is visible behind the characters.
+- **BG off** (button dark) — only the characters float over your desktop; the scene is completely hidden.
+
+The characters are always rendered at 100% opacity regardless of this setting. When the background is off, clicks on that area pass through to whatever is underneath the app.
+
+Opening the **🏠 House editor** automatically enables the background so you can see the scene while editing.
+
+The last-used state is saved and restored on the next launch.
+
 ## Notes
 
 - Only one instance runs at a time (enforced via Windows mutex).

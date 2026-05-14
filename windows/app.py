@@ -151,6 +151,230 @@ _DEFAULT_DEC_POSITIONS: dict[str, list[float]] = {
 }
 
 
+# ── i18n ─────────────────────────────────────────────────────────────────────
+
+_LANG: str = "en"
+
+TRANSLATIONS: dict[str, dict[str, str]] = {
+    "en": {
+        "settings_title": "Settings",
+        "settings_xp_section": "XP SYSTEM",
+        "settings_xp_enabled": "XP enabled",
+        "settings_appearance_section": "APPEARANCE",
+        "settings_opacity": "Opacity:",
+        "settings_claude_section": "CLAUDE CODE INTEGRATION",
+        "settings_hook_status_ok": "✓ Installed",
+        "settings_hook_status_no": "✗ Not installed",
+        "settings_hook_install_btn": "Install / Reinstall hook",
+        "settings_codex_section": "CODEX INTEGRATION (OpenAI)",
+        "settings_shortcut_section": "SHORTCUT",
+        "settings_shortcut_btn": "Create Desktop shortcut",
+        "settings_lang_section": "LANGUAGE",
+        "settings_close": "Close",
+        "picker_title": "Who's working today?",
+        "picker_working_on": "Who's working on",
+        "picker_new_char": "+ New character",
+        "game_offer_title": "Level Up!",
+        "game_offer_body_fmt": "{name} reached level {level}! 🎉",
+        "game_offer_question": "Want to go for a run?",
+        "game_offer_yes": "Let's go!",
+        "game_offer_no": "Not now",
+        "greeting_title": "Good morning",
+        "greeting_msg": "Good morning! 👋",
+        "greeting_question": "What are your plans for today?",
+        "greeting_alarms_btn": "Set alarms",
+        "greeting_skip": "Not now",
+        "welcome_title": "Welcome",
+        "welcome_msg": "Welcome",
+        "welcome_name_prompt": "Give your companion a name:",
+        "welcome_start": "Start",
+        "house_title": "Your House",
+        "house_level_fmt": "Lv.{level} (best character)",
+        "house_section_bg": "BACKGROUND",
+        "house_section_floor": "FLOOR",
+        "house_section_decs": "DECORATIONS  (drag to move)",
+        "house_char_hint": "Character color and style are configured\nfrom the \"Character\" button.",
+        "house_close": "Close",
+        "char_title_fmt": "Character: {name}",
+        "char_section_sprite": "SPRITE (visual character)",
+        "char_section_color": "COLOR",
+        "char_section_outline": "OUTLINE",
+        "char_section_float": "FLOATING ITEM",
+        "char_float_hint": "Floats above the mascot in all animations.",
+        "char_close": "Close",
+        "char_delete": "Delete character",
+        "char_delete_confirm_title": "Delete character",
+        "char_delete_confirm_fmt": "Delete {name}?",
+        "char_delete_error_title": "Cannot delete",
+        "char_delete_error_msg": "There must be at least one character.",
+        "alarms_title": "Alarms & Breaks",
+        "alarms_header": "Planning",
+        "alarms_tab_alarms": "Alarms 🔔",
+        "alarms_tab_breaks": "Breaks ☕",
+        "alarms_add_label": "Add alarm",
+        "alarms_placeholder": "Label",
+        "alarms_default_lbl": "Reminder",
+        "alarms_add_btn": "Add",
+        "alarms_empty": "No alarms configured.",
+        "alarms_break_section": "BREAK REMINDERS",
+        "alarms_break_enabled": "Enable break reminders",
+        "alarms_interval_label": "Work interval:",
+        "alarms_duration_label": "Break duration:",
+        "alarms_auto_close_section": "AUTO-CLOSE",
+        "alarms_auto_close_enabled": "Auto-close after inactivity",
+        "alarms_auto_close_after": "After:",
+        "alarms_close": "Close",
+        "ctx_remove_fmt": "Remove  {name}",
+        "hook_installed_title": "Hook installed",
+        "hook_error_title": "Error",
+        "shortcut_ok_fmt": "Shortcut created in:\n{path}",
+        "shortcut_ok_title": "Done",
+        "shortcut_err_no_vbs": "Could not find 'Iniciar Mascota.vbs'",
+        "shortcut_err_no_desktop": "Desktop folder not found.",
+        "levelup_msg_fmt": "Level Up!  Lv.{level}",
+        "codex_not_detected": " (Codex not detected)",
+    },
+    "es": {
+        "settings_title": "Configuracion",
+        "settings_xp_section": "SISTEMA DE XP",
+        "settings_xp_enabled": "XP activado",
+        "settings_appearance_section": "APARIENCIA",
+        "settings_opacity": "Opacidad:",
+        "settings_claude_section": "INTEGRACIÓN CLAUDE CODE",
+        "settings_hook_status_ok": "✓ Instalado",
+        "settings_hook_status_no": "✗ No instalado",
+        "settings_hook_install_btn": "Instalar / Reinstalar hook",
+        "settings_codex_section": "INTEGRACIÓN CODEX (OpenAI)",
+        "settings_shortcut_section": "ACCESO DIRECTO",
+        "settings_shortcut_btn": "Crear acceso directo en Escritorio",
+        "settings_lang_section": "IDIOMA",
+        "settings_close": "Cerrar",
+        "picker_title": "Quien trabaja hoy?",
+        "picker_working_on": "Quien trabaja en",
+        "picker_new_char": "+ Nuevo personaje",
+        "game_offer_title": "¡Subiste de nivel!",
+        "game_offer_body_fmt": "¡{name} llegó al nivel {level}! 🎉",
+        "game_offer_question": "¿Querés salir a correr un poco?",
+        "game_offer_yes": "¡Vamos!",
+        "game_offer_no": "Ahora no",
+        "greeting_title": "Buenos días",
+        "greeting_msg": "¡Buenos días! 👋",
+        "greeting_question": "¿Qué planes tenés para hoy?",
+        "greeting_alarms_btn": "Configurar alarmas",
+        "greeting_skip": "Ahora no",
+        "welcome_title": "Bienvenido",
+        "welcome_msg": "Bienvenido",
+        "welcome_name_prompt": "Dale un nombre a tu companero:",
+        "welcome_start": "Comenzar",
+        "house_title": "Tu Casa",
+        "house_level_fmt": "Lv.{level} (mejor personaje)",
+        "house_section_bg": "FONDO",
+        "house_section_floor": "SUELO",
+        "house_section_decs": "DECORACIONES  (arrastrá para mover)",
+        "house_char_hint": "El color y estilo del personaje se configuran\ndesde el botón \"Personaje\".",
+        "house_close": "Cerrar",
+        "char_title_fmt": "Personaje: {name}",
+        "char_section_sprite": "SPRITE (personaje visual)",
+        "char_section_color": "COLOR",
+        "char_section_outline": "CONTORNO",
+        "char_section_float": "OBJETO FLOTANTE",
+        "char_float_hint": "Flota sobre la mascota en todas las animaciones.",
+        "char_close": "Cerrar",
+        "char_delete": "Borrar personaje",
+        "char_delete_confirm_title": "Borrar personaje",
+        "char_delete_confirm_fmt": "¿Borrar a {name}?",
+        "char_delete_error_title": "No se puede borrar",
+        "char_delete_error_msg": "Debe haber al menos un personaje.",
+        "alarms_title": "Alarmas y Descansos",
+        "alarms_header": "Planificación",
+        "alarms_tab_alarms": "Alarmas 🔔",
+        "alarms_tab_breaks": "Descansos ☕",
+        "alarms_add_label": "Agregar alarma",
+        "alarms_placeholder": "Etiqueta",
+        "alarms_default_lbl": "Recordatorio",
+        "alarms_add_btn": "Agregar",
+        "alarms_empty": "No hay alarmas configuradas.",
+        "alarms_break_section": "RECORDATORIOS DE DESCANSO",
+        "alarms_break_enabled": "Activar recordatorios de descanso",
+        "alarms_interval_label": "Intervalo de trabajo:",
+        "alarms_duration_label": "Duración del descanso:",
+        "alarms_auto_close_section": "AUTO-CIERRE",
+        "alarms_auto_close_enabled": "Cerrar automáticamente por inactividad",
+        "alarms_auto_close_after": "Después de:",
+        "alarms_close": "Cerrar",
+        "ctx_remove_fmt": "Eliminar  {name}",
+        "hook_installed_title": "Hook instalado",
+        "hook_error_title": "Error",
+        "shortcut_ok_fmt": "Acceso directo creado en:\n{path}",
+        "shortcut_ok_title": "Listo",
+        "shortcut_err_no_vbs": "No se encontró 'Iniciar Mascota.vbs'",
+        "shortcut_err_no_desktop": "No se encontró la carpeta Desktop.",
+        "levelup_msg_fmt": "Level Up!  Lv.{level}",
+        "codex_not_detected": " (Codex no detectado)",
+    },
+}
+
+_EN_LABELS: dict[str, str] = {
+    "verde": "Green", "azul": "Blue", "tierra": "Dirt",
+    "nieve": "Snow", "morado": "Purple", "arena": "Sand",
+    "oscuro": "Dark", "amarillo": "Yellow", "negro": "Black", "piedra": "Stone",
+    "oficina": "Office", "bosque": "Forest", "montanas": "Mountains",
+    "noche": "Night", "playa": "Beach", "espacio": "Space",
+    "ninguno": "None", "blanco": "White", "dorado": "Gold",
+    "rosa": "Pink", "cyan": "Cyan", "rojo": "Red",
+    "corona": "Crown", "estrella": "Star", "halo": "Halo",
+    "rayo": "Lightning", "corazon": "Heart", "nota": "Note",
+    "zzz": "Zzz", "fuego": "Fire", "calavera": "Skull",
+    "arcoiris": "Rainbow", "explosion": "Explosion", "diamante": "Diamond",
+    "luna": "Moon",
+    "planta": "Plant", "alfombra": "Rug", "lampara": "Lamp",
+    "globos": "Balloons", "cactus": "Cactus", "computadora": "Computer",
+    "cofre": "Chest", "nave": "Spaceship", "acuario": "Aquarium",
+    "sombrilla": "Umbrella", "tabla": "Surfboard",
+    "fogata": "Campfire", "carpa": "Tent",
+    "original": "Original", "verde claro": "Light green",
+}
+
+
+def T(key: str) -> str:
+    d = TRANSLATIONS.get(_LANG, TRANSLATIONS["en"])
+    return d.get(key, TRANSLATIONS["en"].get(key, key))
+
+
+def TL(key: str, fallback: str) -> str:
+    if _LANG == "en":
+        return _EN_LABELS.get(key, fallback)
+    return fallback
+
+
+def _xlate_opts(opts: list) -> list:
+    if _LANG == "es":
+        return opts
+    return [((opt[0], TL(opt[0], opt[1])) + tuple(opt[2:])) for opt in opts]
+
+
+def _get_all_monitors() -> list[tuple[int, int, int, int]]:
+    class _RECT(ctypes.Structure):
+        _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                    ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+    monitors: list[tuple[int, int, int, int]] = []
+    _EnumProc = ctypes.WINFUNCTYPE(
+        ctypes.c_bool, ctypes.c_ulong, ctypes.c_ulong,
+        ctypes.POINTER(_RECT), ctypes.c_double,
+    )
+    def _cb(hmonitor, hdc, lprect, lparam):
+        r = lprect.contents
+        monitors.append((r.left, r.top, r.right - r.left, r.bottom - r.top))
+        return True
+    ctypes.windll.user32.EnumDisplayMonitors(None, None, _EnumProc(_cb), 0)
+    if not monitors:
+        w = ctypes.windll.user32.GetSystemMetrics(0)
+        h = ctypes.windll.user32.GetSystemMetrics(1)
+        monitors = [(0, 0, w, h)]
+    monitors.sort(key=lambda m: (0 if (m[0] == 0 and m[1] == 0) else 1, m[0], m[1]))
+    return monitors
+
+
 class DataStore:
     _DEFAULTS: dict[str, Any] = {
         "window_x": -1,
@@ -174,6 +398,8 @@ class DataStore:
         "alarms": [],
         "greeted_date": "",
         "game_scores": [],
+        "language": "en",
+        "bg_visible": True,
     }
 
     def __init__(self) -> None:
@@ -2091,31 +2317,9 @@ class EventHandler(socketserver.BaseRequestHandler):
 
 
 class BreakOverlayWindow:
-    @staticmethod
-    def _get_all_monitors() -> list[tuple[int, int, int, int]]:
-        class _RECT(ctypes.Structure):
-            _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
-                        ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
-        monitors: list[tuple[int, int, int, int]] = []
-        _EnumProc = ctypes.WINFUNCTYPE(
-            ctypes.c_bool, ctypes.c_ulong, ctypes.c_ulong,
-            ctypes.POINTER(_RECT), ctypes.c_double,
-        )
-        def _cb(hmonitor, hdc, lprect, lparam):
-            r = lprect.contents
-            monitors.append((r.left, r.top, r.right - r.left, r.bottom - r.top))
-            return True
-        ctypes.windll.user32.EnumDisplayMonitors(None, None, _EnumProc(_cb), 0)
-        if not monitors:
-            w = ctypes.windll.user32.GetSystemMetrics(0)
-            h = ctypes.windll.user32.GetSystemMetrics(1)
-            monitors = [(0, 0, w, h)]
-        monitors.sort(key=lambda m: (0 if (m[0] == 0 and m[1] == 0) else 1, m[0], m[1]))
-        return monitors
-
     def __init__(self, root: tk.Tk, duration_seconds: int,
                  on_complete: Any, on_cancel: Any) -> None:
-        monitors = self._get_all_monitors()
+        monitors = _get_all_monitors()
         mx, my, mw, mh = monitors[0]
 
         self._win = tk.Toplevel(root)
@@ -2764,12 +2968,33 @@ class MascotaApp:
         self._dec_drag_pos: tuple[float, float] | None = None
         self._house_win_open: bool = False
 
+        global _LANG
+        _LANG = str(self.data_store.get("language") or "en")
+
         self.root = tk.Tk()
         self.root.title("Mascota")
-        self.root.geometry("420x158+730+30")
+        self.root.geometry("420x178")
         self.root.overrideredirect(True)
         self.root.attributes("-topmost", True)
         self.root.configure(bg=TRANSPARENT_KEY)
+
+        # house_win: renders background scene (BG image + decorations).
+        # Click-through so users interact with sprite_shield (above) and desktop below.
+        self.bg_visible: bool = bool(self.data_store.get("bg_visible"))
+        self.house_win = tk.Toplevel()
+        self.house_win.overrideredirect(True)
+        self.house_win.attributes("-topmost", True)
+        self.house_win.configure(bg="#0a0f1a")
+        self.house_win.geometry("420x132")
+        self.house_win.wm_attributes("-alpha", 1.0 if self.bg_visible else 0.0)
+
+        # Sprite shield: layered above house_win. Never gets alpha applied so
+        # characters are always 100% opaque. Renders ONLY sprites & labels.
+        self.sprite_shield = tk.Toplevel()
+        self.sprite_shield.overrideredirect(True)
+        self.sprite_shield.attributes("-topmost", True)
+        self.sprite_shield.configure(bg=TRANSPARENT_KEY)
+        self.sprite_shield.geometry("420x132")
 
         self.server = EventTCPServer((APP_HOST, APP_PORT), EventHandler)
         self.server.app = self
@@ -2785,9 +3010,17 @@ class MascotaApp:
             sh = self.root.winfo_screenheight()
             if wx < sw and wy < sh:
                 self.root.geometry(f"+{wx}+{wy}")
-        opacity = float(self.data_store.get("opacity"))
-        if opacity < 1.0:
-            self.root.wm_attributes("-alpha", opacity)
+        else:
+            self.root.update_idletasks()
+            mx, my, mw, mh = _get_all_monitors()[0]
+            ww = self.root.winfo_width() or 420
+            wh = self.root.winfo_height() or 178
+            cx = mx + (mw - ww) // 2
+            cy = my + (mh - wh) // 2
+            self.root.geometry(f"+{cx}+{cy}")
+        # Reposition overlays below the toolbar using the actual widget coordinates
+        self.root.update_idletasks()
+        self.update_layout()
         self._auto_install_hook()
         if not self.data_store.get("characters"):
             self.root.after(600, self._show_first_use_popup)
@@ -2808,7 +3041,7 @@ class MascotaApp:
         return mutex
 
     def _on_level_up(self, new_level: int, char_id: str | None = None) -> None:
-        self._levelup_message = f"Level Up!  Lv.{new_level}"
+        self._levelup_message = T("levelup_msg_fmt").format(level=new_level)
         self._levelup_until = time.time() + 3.5
         self._levelup_sparkles_until = time.time() + 3.5
         threading.Thread(target=self._play_levelup_sound, daemon=True).start()
@@ -2816,6 +3049,15 @@ class MascotaApp:
             char = self.data_store.get_character(char_id) if char_id else self.data_store.get_active_character()
             if char:
                 self.root.after(3800, lambda: self._show_game_offer(new_level, char["id"]))
+
+    def toggle_background(self) -> None:
+        self.bg_visible = not self.bg_visible
+        self.data_store.set("bg_visible", self.bg_visible)
+        self.house_win.wm_attributes("-alpha", 1.0 if self.bg_visible else 0.0)
+        if self.bg_visible:
+            self._bg_btn.configure(bg="#1d4ed8", fg="white")
+        else:
+            self._bg_btn.configure(bg="#161b22", fg="#8b949e")
 
     @staticmethod
     def _play_levelup_sound() -> None:
@@ -2831,14 +3073,27 @@ class MascotaApp:
         self.frame.pack(fill="both", expand=True, padx=4, pady=4)
 
         # ── Hero canvas (mascots) ────────────────────────────────────
-        self.hero = tk.Canvas(self.frame, width=412, height=112,
-                               bg=TRANSPARENT_KEY, highlightthickness=0, relief="flat")
-        self.hero.pack(fill="x")
-        self.hero.bind("<ButtonPress-1>", self.start_drag)
-        self.hero.bind("<B1-Motion>", self.do_drag)
-        self.hero.bind("<ButtonRelease-1>", self.on_hero_release)
-        self.hero.bind("<Double-Button-1>", self.on_hero_double_click)
-        self.hero.bind("<Button-3>", self.on_hero_right_click)
+        # _root_hero: layout placeholder in root frame (also the render target in expanded mode)
+        self._root_hero = tk.Canvas(self.frame, width=412, height=132,
+                                    bg=TRANSPARENT_KEY, highlightthickness=0, relief="flat")
+        self._root_hero.pack(fill="x")
+        # house_canvas: renders ONLY background + decorations (in house_win, opacity-controlled)
+        self.house_canvas = tk.Canvas(self.house_win, width=420, height=132,
+                                      bg="#0a0f1a", highlightthickness=0, relief="flat")
+        self.house_canvas.pack(fill="both", expand=True)
+        # _shield_hero: renders ONLY mascot sprites (in sprite_shield, always 100% opaque)
+        self._shield_hero = tk.Canvas(self.sprite_shield, width=420, height=132,
+                                      bg=TRANSPARENT_KEY, highlightthickness=0, relief="flat")
+        self._shield_hero.pack(fill="both", expand=True)
+        # In compact mode (default), all sprite rendering goes to the shield canvas
+        self.hero = self._shield_hero
+        # Bind events to both hero canvases
+        for _hc in [self._root_hero, self._shield_hero]:
+            _hc.bind("<ButtonPress-1>", self.start_drag)
+            _hc.bind("<B1-Motion>", self.do_drag)
+            _hc.bind("<ButtonRelease-1>", self.on_hero_release)
+            _hc.bind("<Double-Button-1>", self.on_hero_double_click)
+            _hc.bind("<Button-3>", self.on_hero_right_click)
 
         # ── Bottom toolbar (always visible) ─────────────────────────
         C_TOOLBAR = "#0d1117"
@@ -2847,17 +3102,24 @@ class MascotaApp:
         C_TEXT    = "#8b949e"
 
         self.toolbar = tk.Frame(self.frame, bg=C_TOOLBAR, height=38)
-        self.toolbar.pack(fill="x")
+        self.toolbar.pack(fill="x")   # toolbar is at the TOP
         self.toolbar.pack_propagate(False)
+        # Make toolbar draggable (the dark area between buttons)
+        self.toolbar.bind("<ButtonPress-1>", self.start_drag)
+        self.toolbar.bind("<B1-Motion>", self.do_drag)
+        self.toolbar.bind("<ButtonRelease-1>", self.on_hero_release)
 
         # Divider + buttons on the right (packed first to guarantee fixed space)
         right = tk.Frame(self.toolbar, bg=C_TOOLBAR)
         right.pack(side="right", padx=(0, 4), fill="y")
 
-        # XP label on the left (gets remaining space after buttons)
+        # XP label on the left (draggable)
         self.xp_label = tk.Label(self.toolbar, text="", fg="#58a6ff", bg=C_TOOLBAR,
                                   font=("Microsoft YaHei UI", 8), anchor="w")
         self.xp_label.pack(side="left", padx=(8, 2), fill="y")
+        self.xp_label.bind("<ButtonPress-1>", self.start_drag)
+        self.xp_label.bind("<B1-Motion>", self.do_drag)
+        self.xp_label.bind("<ButtonRelease-1>", self.on_hero_release)
 
         def _btn(txt: str, cmd: Any, fg: str = C_TEXT, bg: str = C_BTN,
                  emoji: bool = False) -> tk.Button:
@@ -2870,11 +3132,19 @@ class MascotaApp:
             b.pack(side="left", padx=2, pady=4)
             return b
 
-        _btn("≡", self.toggle_details, fg="#58a6ff")
         _btn("🏠", self.open_house_editor, emoji=True)
         _btn("👤", self.open_character_editor, emoji=True)
         _btn("⏰", self.open_alarms, fg="#e3b341", emoji=True)
         _btn("⚙", self.open_settings)
+        # Background toggle: shows/hides the house scene behind the characters
+        _bg_init_bg = "#1d4ed8" if self.bg_visible else C_BTN
+        _bg_init_fg = "white" if self.bg_visible else C_TEXT
+        self._bg_btn = tk.Button(right, text="BG", command=self.toggle_background,
+                                  bg=_bg_init_bg, fg=_bg_init_fg,
+                                  activebackground=C_HOVER, activeforeground="#e6edf3",
+                                  relief="flat", padx=6, pady=3,
+                                  font=("Microsoft YaHei UI", 9), bd=0, highlightthickness=0)
+        self._bg_btn.pack(side="left", padx=2, pady=4)
         self.floating_install = tk.Button(right)   # dummy ref, hook moved to settings
         _btn("✕", self.shutdown, fg="#fee2e2", bg="#7f1d1d")
 
@@ -2915,22 +3185,30 @@ class MascotaApp:
         self.update_layout()
 
     def _configure_transparency(self) -> None:
-        try:
-            self.root.wm_attributes("-transparentcolor", TRANSPARENT_KEY)
-        except tk.TclError:
-            pass
+        for win in [self.root, self.sprite_shield]:
+            try:
+                win.wm_attributes("-transparentcolor", TRANSPARENT_KEY)
+            except tk.TclError:
+                pass
         self._set_tool_window_style()
+        self._set_tool_window_style(self.sprite_shield)
+        self._set_tool_window_style(self.house_win, click_through=True)
 
     def _auto_install_hook(self) -> None:
         ok, message = self.installer.install()
         self.status_var.set(message if ok else f"Auto-install skipped: {message}")
         self.codex_installer.install()
 
-    def _set_tool_window_style(self) -> None:
+    def _set_tool_window_style(self, win: tk.Misc | None = None,
+                               click_through: bool = False) -> None:
         try:
-            hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
+            target = win if win is not None else self.root
+            hwnd = ctypes.windll.user32.GetParent(target.winfo_id())
             exstyle = ctypes.windll.user32.GetWindowLongW(hwnd, -20)
-            ctypes.windll.user32.SetWindowLongW(hwnd, -20, exstyle | 0x00000080)
+            new_style = exstyle | 0x00000080  # WS_EX_TOOLWINDOW (no taskbar entry)
+            if click_through:
+                new_style |= 0x00000020  # WS_EX_TRANSPARENT (mouse pass-through)
+            ctypes.windll.user32.SetWindowLongW(hwnd, -20, new_style)
         except Exception:
             pass
 
@@ -2977,6 +3255,12 @@ class MascotaApp:
         x = self.root.winfo_x() + dx
         y = self.root.winfo_y() + dy
         self.root.geometry(f"+{x}+{y}")
+        if not self.details_visible:
+            # Move overlays by the same delta — preserves their Y offset from toolbar
+            self.house_win.geometry(
+                f"+{self.house_win.winfo_x() + dx}+{self.house_win.winfo_y() + dy}")
+            self.sprite_shield.geometry(
+                f"+{self.sprite_shield.winfo_x() + dx}+{self.sprite_shield.winfo_y() + dy}")
         self.drag_origin = (event.x_root, event.y_root)
 
     def _decoration_at_point(self, x: float, y: float) -> str | None:
@@ -3029,28 +3313,52 @@ class MascotaApp:
         self.status_label.pack_forget()
         self.body_frame.pack_forget()
         self.floating_actions.place_forget()
+        self.toolbar.pack_forget()
+        self._root_hero.pack_forget()
 
         if self.details_visible:
+            # Expanded mode: render to root's canvas, hide overlay windows
+            self.hero = self._root_hero
+            # Clear stale content from overlay canvases before hiding them
+            self._shield_hero.delete("all")
+            self.house_canvas.delete("all")
+            self.house_win.withdraw()
+            self.sprite_shield.withdraw()
             self.frame.configure(bg=C_TOOLBAR, highlightthickness=1,
                                   highlightbackground="#30363d")
             self.root.configure(bg=C_TOOLBAR)
-            self.hero.configure(bg=C_TOOLBAR, width=510, height=110)
-            # Pack order: header → hero → status → body → toolbar
-            self.toolbar.pack_forget()
+            self._root_hero.configure(bg=C_TOOLBAR, width=510, height=110)
+            # Pack order: toolbar → header → hero → status → body
+            self.toolbar.pack(fill="x")
             self.header.pack(fill="x")
-            self.hero.pack(fill="x", pady=(0, 2))
+            self._root_hero.pack(fill="x", pady=(0, 2))
             self.status_label.pack(fill="x", padx=10)
             self.body_frame.pack(fill="both", expand=True, padx=8, pady=(4, 6))
-            self.toolbar.pack(fill="x")
             self.root.geometry("570x450")
             self.toggle_var.set("▲ Ocultar")
         else:
+            # Compact mode: toolbar at TOP, overlay windows below it
+            self.hero = self._shield_hero
             self.frame.configure(bg=TRANSPARENT_KEY, highlightthickness=0)
             self.root.configure(bg=TRANSPARENT_KEY)
-            self.hero.configure(bg=TRANSPARENT_KEY, width=412, height=112)
-            self.hero.pack(fill="x")
+            self._root_hero.configure(bg=TRANSPARENT_KEY, width=412, height=132)
+            # Pack order: toolbar first (top), then transparent hero spacer below
             self.toolbar.pack(fill="x")
-            self.root.geometry("420x158")
+            self._root_hero.pack(fill="x")
+            self.root.geometry("420x178")
+            # Position overlay windows starting exactly where the hero area is on screen
+            self.root.update_idletasks()
+            rx = self.root.winfo_x()
+            ry = self.root.winfo_y()
+            # winfo_rooty() gives the absolute screen Y of the widget — most reliable
+            overlay_y = self._root_hero.winfo_rooty()
+            if overlay_y <= 1:
+                overlay_y = ry + 42  # fallback: approx frame-pad(4) + toolbar(38)
+            self.house_win.geometry(f"420x132+{rx}+{overlay_y}")
+            self.house_win.deiconify()
+            self.sprite_shield.geometry(f"420x132+{rx}+{overlay_y}")
+            self.sprite_shield.deiconify()
+            self.sprite_shield.lift()  # sprite_shield always above house_win
             self.toggle_var.set("▼ Info")
         self._configure_transparency()
 
@@ -3095,7 +3403,7 @@ class MascotaApp:
             activebackground="#1e293b", activeforeground="#f8fafc",
             relief="flat", bd=0,
         )
-        label = f"Eliminar  {target.project_name}"
+        label = T("ctx_remove_fmt").format(name=target.project_name)
         menu.add_command(label=label, command=lambda: self._remove_session(session_id, target))
         try:
             menu.tk_popup(event.x_root, event.y_root)
@@ -3472,6 +3780,7 @@ class MascotaApp:
             y += card_h + gap
 
     def render_mascot(self, sessions: list[SessionData]) -> None:
+        # Sprite canvas (sprite_shield) — always 100% opaque, draws only mascots
         canvas = self.hero
         canvas.delete("all")
         self.sprite_bounds = {}
@@ -3489,11 +3798,16 @@ class MascotaApp:
         ground_rgb = next((g[2] for g in GRASS_COLORS if g[0] == grass_key), None)
 
         if not self.details_visible:
-            self.bg_renderer.draw(canvas, width, height, theme=bg_theme, ground_color=ground_rgb,
+            # Background scene goes to house_canvas (opacity-controlled window)
+            hc = self.house_canvas
+            hc.delete("all")
+            hc_w = int(hc.cget("width")) or width
+            hc_h = int(hc.cget("height")) or height
+            self.bg_renderer.draw(hc, hc_w, hc_h, theme=bg_theme, ground_color=ground_rgb,
                                    x_offset=int(self._bg_scroll_x))
             self.decoration_bounds = {}
             for dec in active_decorations:
-                img = self.dec_renderer.get(dec, height)
+                img = self.dec_renderer.get(dec, hc_h)
                 if img is None:
                     continue
                 default_pos = _DEFAULT_DEC_POSITIONS.get(dec, [0.5, 0.5])
@@ -3501,11 +3815,11 @@ class MascotaApp:
                 if self._dragging_decoration == dec and self._dec_drag_pos is not None:
                     dx, dy = self._dec_drag_pos
                 else:
-                    dx = stored[0] * width
-                    dy = stored[1] * height
-                draw_dx = (dx - self._bg_scroll_x) % width
-                dw, dh = self.dec_renderer.size(dec, height)
-                canvas.create_image(int(draw_dx), int(dy), image=img, anchor="center")
+                    dx = stored[0] * hc_w
+                    dy = stored[1] * hc_h
+                draw_dx = (dx - self._bg_scroll_x) % hc_w
+                dw, dh = self.dec_renderer.size(dec, hc_h)
+                hc.create_image(int(draw_dx), int(dy), image=img, anchor="center")
                 self.decoration_bounds[dec] = (draw_dx - dw / 2, dy - dh / 2,
                                                draw_dx + dw / 2, dy + dh / 2)
 
@@ -3543,15 +3857,10 @@ class MascotaApp:
             # Adjust y so feet stay at the same ground level regardless of size
             y_ground_offset = (1.0 - level_mult) * 20
             effective_bob = 0.0
-            sprite_y = 70 + y_ground_offset + session.sprite_y_offset * 0.22 + effective_bob
-
-            # Draw floating item above sprite bounding box (canvas-level, animation-safe)
-            float_img = self.float_renderer.get(float_key, sprite_scale)
-            if float_img is not None:
-                item_h = float_img.height()
-                item_bob = math.sin(sess_phase * 1.6) * 2.5
-                item_y = sprite_y - sprite_height / 2 - item_h / 2 - 3 + item_bob
-                canvas.create_image(int(pet_x), int(item_y), image=float_img, anchor="center")
+            sprite_y = 82 + y_ground_offset + session.sprite_y_offset * 0.22 + effective_bob
+            # Clamp so the sprite is always fully visible within the canvas bounds
+            half_sh = sprite_height / 2
+            sprite_y = max(half_sh + 1, min(height - half_sh - 1, sprite_y))
 
             canvas.create_image(pet_x, sprite_y, image=sprite)
             self.sprite_bounds[session.session_id] = (
@@ -3577,11 +3886,21 @@ class MascotaApp:
                 char = session_char
                 if char:
                     name = char.get("name", "")
-                    name_y = sprite_y - sprite_height / 2 - 9
+                    raw_name_y = sprite_y - sprite_height / 2 - 9
+                    name_y = max(14, raw_name_y)
+                    # Draw floating accessory behind the name at name position (smaller scale)
+                    if float_key and float_key != "ninguno":
+                        item_scale = min(sprite_scale * 0.42, 1.5)
+                        float_img = self.float_renderer.get(float_key, item_scale)
+                        if float_img is not None:
+                            item_bob = math.sin(sess_phase * 1.6) * 1.5
+                            canvas.create_image(int(pet_x), int(name_y + item_bob),
+                                                image=float_img, anchor="center")
                     name_color = "#ffffff" if is_selected else "#e2e8f0"
                     font = ("Microsoft YaHei UI", 9, "bold") if is_selected else ("Microsoft YaHei UI", 8)
-                    canvas.create_text(pet_x + 1, name_y + 1, text=name,
-                                       fill="#000000", font=font, anchor="center")
+                    for ox, oy in [(-1, 1), (1, 1), (0, 2)]:
+                        canvas.create_text(pet_x + ox, name_y + oy, text=name,
+                                           fill="#000000", font=font, anchor="center")
                     canvas.create_text(pet_x, name_y, text=name,
                                        fill=name_color, font=font, anchor="center")
 
@@ -3664,6 +3983,10 @@ class MascotaApp:
                 font=("Microsoft YaHei UI", 7),
                 anchor="center",
             )
+
+        # Keep sprite_shield always visually above house_win
+        if not self.details_visible:
+            self.sprite_shield.lift()
 
     @staticmethod
     def _draw_grass_band(canvas: tk.Canvas, width: int, height: int,
@@ -3808,7 +4131,7 @@ class MascotaApp:
 
         win = tk.Toplevel(self.root)
         self._picker_win = win
-        win.title("Quien trabaja hoy?")
+        win.title(T("picker_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, False)
@@ -3818,7 +4141,7 @@ class MascotaApp:
         win.geometry(f"270x{height}+{x}+{y}")
         win.focus_set()
 
-        tk.Label(win, text="Quien trabaja en", fg="#64748b", bg="#111827",
+        tk.Label(win, text=T("picker_working_on"), fg="#64748b", bg="#111827",
                  font=("Microsoft YaHei UI", 8)).pack(pady=(14, 0))
         tk.Label(win, text=project, fg="#f8fafc", bg="#111827",
                  font=("Microsoft YaHei UI", 10, "bold")).pack(pady=(0, 8))
@@ -3876,7 +4199,7 @@ class MascotaApp:
                       bg="#2563eb", fg="white", relief="flat",
                       padx=8, pady=4).pack(side="left", padx=(4, 0))
 
-        tk.Button(new_btn_frame, text="+ Nuevo personaje", command=show_create,
+        tk.Button(new_btn_frame, text=T("picker_new_char"), command=show_create,
                   bg="#111827", fg="#475569", activebackground="#111827",
                   activeforeground="#64748b", relief="flat",
                   padx=10, pady=4,
@@ -3895,17 +4218,17 @@ class MascotaApp:
         if char is None:
             return
         win = tk.Toplevel(self.root)
-        win.title("¡Subiste de nivel!")
+        win.title(T("game_offer_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, False)
         x, y = self._dialog_xy()
         win.geometry(f"320x150+{x}+{y}")
 
-        tk.Label(win, text=f"¡{char.get('name', 'Mascota')} llegó al nivel {level}! 🎉",
+        tk.Label(win, text=T("game_offer_body_fmt").format(name=char.get("name", "Mascota"), level=level),
                  fg="#f8fafc", bg="#111827",
                  font=("Microsoft YaHei UI", 11, "bold")).pack(pady=(18, 4))
-        tk.Label(win, text="¿Querés salir a correr un poco?",
+        tk.Label(win, text=T("game_offer_question"),
                  fg="#94a3b8", bg="#111827",
                  font=("Microsoft YaHei UI", 9)).pack(pady=(0, 14))
 
@@ -3916,13 +4239,13 @@ class MascotaApp:
             win.destroy()
             self.open_mini_game(char_id)
 
-        tk.Button(btn_row, text="¡Vamos!",
+        tk.Button(btn_row, text=T("game_offer_yes"),
                   command=play,
                   bg="#2563eb", fg="white",
                   activebackground="#1d4ed8", activeforeground="white",
                   relief="flat", padx=12, pady=6,
                   font=("Microsoft YaHei UI", 9)).pack(side="left", padx=(0, 8))
-        tk.Button(btn_row, text="Ahora no",
+        tk.Button(btn_row, text=T("game_offer_no"),
                   command=win.destroy,
                   bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
@@ -3945,7 +4268,7 @@ class MascotaApp:
         self.data_store.set("greeted_date", today)
 
         win = tk.Toplevel(self.root)
-        win.title("Buenos días")
+        win.title(T("greeting_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, False)
@@ -3953,10 +4276,10 @@ class MascotaApp:
         x, y = self._dialog_xy()
         win.geometry(f"380x160+{x}+{y}")
 
-        tk.Label(win, text="¡Buenos días! 👋",
+        tk.Label(win, text=T("greeting_msg"),
                  fg="#f8fafc", bg="#111827",
                  font=("Microsoft YaHei UI", 13, "bold")).pack(pady=(18, 4))
-        tk.Label(win, text="¿Qué planes tenés para hoy?",
+        tk.Label(win, text=T("greeting_question"),
                  fg="#94a3b8", bg="#111827",
                  font=("Microsoft YaHei UI", 10)).pack(pady=(0, 14))
 
@@ -3967,13 +4290,13 @@ class MascotaApp:
             win.destroy()
             self.open_alarms()
 
-        tk.Button(btn_row, text="Configurar alarmas",
+        tk.Button(btn_row, text=T("greeting_alarms_btn"),
                   command=open_alarms_and_close,
                   bg="#2563eb", fg="white",
                   activebackground="#1d4ed8", activeforeground="white",
                   relief="flat", padx=12, pady=6,
                   font=("Microsoft YaHei UI", 9)).pack(side="left", padx=(0, 8))
-        tk.Button(btn_row, text="Ahora no",
+        tk.Button(btn_row, text=T("greeting_skip"),
                   command=win.destroy,
                   bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
@@ -3982,7 +4305,7 @@ class MascotaApp:
 
     def _show_first_use_popup(self) -> None:
         win = tk.Toplevel(self.root)
-        win.title("Bienvenido")
+        win.title(T("welcome_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, False)
@@ -3991,9 +4314,9 @@ class MascotaApp:
         win.geometry(f"280x190+{x}+{y}")
         win.grab_set()
 
-        tk.Label(win, text="Bienvenido", fg="#f8fafc", bg="#111827",
+        tk.Label(win, text=T("welcome_msg"), fg="#f8fafc", bg="#111827",
                  font=("Microsoft YaHei UI", 14, "bold")).pack(pady=(22, 4))
-        tk.Label(win, text="Dale un nombre a tu companero:", fg="#94a3b8",
+        tk.Label(win, text=T("welcome_name_prompt"), fg="#94a3b8",
                  bg="#111827", font=("Microsoft YaHei UI", 9)).pack(pady=(0, 8))
 
         name_var = tk.StringVar(value="Mascota")
@@ -4010,7 +4333,7 @@ class MascotaApp:
             win.destroy()
 
         entry.bind("<Return>", lambda _: confirm())
-        tk.Button(win, text="Comenzar", command=confirm,
+        tk.Button(win, text=T("welcome_start"), command=confirm,
                   bg="#2563eb", fg="white", activebackground="#1d4ed8",
                   activeforeground="white", relief="flat",
                   padx=14, pady=6).pack(pady=14)
@@ -4019,12 +4342,20 @@ class MascotaApp:
         if self.details_visible:
             self.toggle_details()
 
+        # Auto-enable background so the user can see what they're editing
+        if not self.bg_visible:
+            self.bg_visible = True
+            self.data_store.set("bg_visible", True)
+            self.house_win.wm_attributes("-alpha", 1.0)
+            if hasattr(self, "_bg_btn"):
+                self._bg_btn.configure(bg="#1d4ed8", fg="white")
+
         current_level = self.xp_system.max_level()
         house = self.data_store.get_house()
         active_char = self.data_store.get_active_character() or {}
 
         win = tk.Toplevel(self.root)
-        win.title("Tu Casa")
+        win.title(T("house_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, True)
@@ -4036,17 +4367,17 @@ class MascotaApp:
         # ── Header (fixed, outside scroll) ────────────────────────────────────
         hdr = tk.Frame(win, bg="#0f172a")
         hdr.pack(fill="x")
-        tk.Label(hdr, text="Tu Casa", fg="#f8fafc", bg="#0f172a",
+        tk.Label(hdr, text=T("house_title"), fg="#f8fafc", bg="#0f172a",
                  font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=14, pady=10)
-        tk.Label(hdr, text=f"Lv.{current_level} (mejor personaje)", fg="#fbbf24", bg="#0f172a",
+        tk.Label(hdr, text=T("house_level_fmt").format(level=current_level), fg="#fbbf24", bg="#0f172a",
                  font=("Microsoft YaHei UI", 9)).pack(side="right", padx=14)
 
         # ── Scrollable body ────────────────────────────────────────────────────
         scroll_canvas = tk.Canvas(win, bg="#111827", highlightthickness=0)
         scrollbar = tk.Scrollbar(win, orient="vertical", command=scroll_canvas.yview)
         scroll_canvas.configure(yscrollcommand=scrollbar.set)
-        # Cerrar must be packed before the expanding canvas so it stays visible
-        tk.Button(win, text="Cerrar", command=win.destroy, bg="#1f2937", fg="#cbd5e1",
+        # Close must be packed before the expanding canvas so it stays visible
+        tk.Button(win, text=T("house_close"), command=win.destroy, bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=12, pady=4).pack(side="bottom", pady=8)
 
@@ -4083,7 +4414,7 @@ class MascotaApp:
 
         # ── Fondo ─────────────────────────────────────────────────────────────
         separator()
-        section_label("FONDO")
+        section_label(T("house_section_bg"))
         bg_frame = tk.Frame(body, bg="#111827")
         bg_frame.pack(fill="x", padx=14, pady=(0, 4))
         current_bg = [house.get("background", "oficina")]
@@ -4107,7 +4438,8 @@ class MascotaApp:
                         refresh_bg_buttons()
                 bg_color = "#2563eb" if selected else ("#1e293b" if not locked else "#0f172a")
                 fg_color = "white" if selected else ("#f8fafc" if not locked else "#334155")
-                lbl = label if not locked else f"{label}\nLv.{min_lev}"
+                tlbl = TL(key, label)
+                lbl = tlbl if not locked else f"{tlbl}\nLv.{min_lev}"
                 tk.Button(row, text=lbl, command=on_bg, bg=bg_color, fg=fg_color,
                           activebackground="#1e293b", activeforeground="#f8fafc",
                           relief="flat", padx=6, pady=4, width=12,
@@ -4118,7 +4450,7 @@ class MascotaApp:
 
         # ── Suelo ─────────────────────────────────────────────────────────────
         separator()
-        section_label("SUELO")
+        section_label(T("house_section_floor"))
         grass_frame = tk.Frame(body, bg="#111827")
         grass_frame.pack(fill="x", padx=14, pady=(0, 4))
         current_grass = [house.get("grass_color", "verde")]
@@ -4144,7 +4476,7 @@ class MascotaApp:
                 border = "#2563eb" if selected else "#334155"
                 btn_frame = tk.Frame(row, bg=border, padx=2, pady=2)
                 btn_frame.pack(side="left", padx=3)
-                tk.Button(btn_frame, text=label, command=on_grass,
+                tk.Button(btn_frame, text=TL(key, label), command=on_grass,
                           bg=hex_col, fg=fg_col,
                           activebackground=hex_col, activeforeground=fg_col,
                           relief="flat", padx=6, pady=3,
@@ -4154,7 +4486,7 @@ class MascotaApp:
 
         # ── Decoraciones ──────────────────────────────────────────────────────
         separator()
-        section_label("DECORACIONES  (arrastrá para mover)")
+        section_label(T("house_section_decs"))
         dec_frame = tk.Frame(body, bg="#111827")
         dec_frame.pack(fill="x", padx=14, pady=(0, 4))
         current_decs = list(house.get("decorations", []))
@@ -4178,7 +4510,7 @@ class MascotaApp:
                 lock_txt = f"  (Lv.{min_lev})" if locked else ""
                 btn_bg = "#1e293b" if (active and not locked) else "#111827"
                 btn_fg = "#f8fafc" if not locked else "#334155"
-                tk.Button(dec_frame, text=f"{check_char}  {label}{lock_txt}",
+                tk.Button(dec_frame, text=f"{check_char}  {TL(key, label)}{lock_txt}",
                           command=on_dec, bg=btn_bg, fg=btn_fg,
                           activebackground="#1e293b", activeforeground="#f8fafc",
                           relief="flat", anchor="w", padx=8, pady=3,
@@ -4188,7 +4520,7 @@ class MascotaApp:
         refresh_dec_buttons()
 
         separator()
-        tk.Label(body, text="El color y estilo del personaje se configuran\ndesde el botón \"Personaje\".",
+        tk.Label(body, text=T("house_char_hint"),
                  fg="#475569", bg="#111827",
                  font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=16, pady=(8, 10))
 
@@ -4202,7 +4534,7 @@ class MascotaApp:
         current_level = char.get("level", 1)
 
         win = tk.Toplevel(self.root)
-        win.title(f"Personaje: {char.get('name', 'Mascota')}")
+        win.title(T("char_title_fmt").format(name=char.get("name", "Mascota")))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, False)
@@ -4220,24 +4552,24 @@ class MascotaApp:
 
         btn_row = tk.Frame(win, bg="#111827")
         btn_row.pack(side="bottom", pady=8)
-        tk.Button(btn_row, text="Cerrar", command=win.destroy, bg="#1f2937", fg="#cbd5e1",
+        tk.Button(btn_row, text=T("char_close"), command=win.destroy, bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=12, pady=4).pack(side="left", padx=(0, 6))
 
         def confirm_delete() -> None:
             chars = self.data_store.get_characters()
             if len(chars) <= 1:
-                messagebox.showwarning("No se puede borrar",
-                                       "Debe haber al menos un personaje.", parent=win)
+                messagebox.showwarning(T("char_delete_error_title"),
+                                       T("char_delete_error_msg"), parent=win)
                 return
-            if messagebox.askyesno("Borrar personaje",
-                                   f"¿Borrar a {char.get('name', 'este personaje')}?",
+            if messagebox.askyesno(T("char_delete_confirm_title"),
+                                   T("char_delete_confirm_fmt").format(name=char.get("name", "?")),
                                    parent=win):
                 self.data_store.delete_character(char_id)
                 self.store.unassign_character_by_id(char_id)
                 win.destroy()
 
-        tk.Button(btn_row, text="Borrar personaje", command=confirm_delete,
+        tk.Button(btn_row, text=T("char_delete"), command=confirm_delete,
                   bg="#1f2937", fg="#ef4444",
                   activebackground="#374151", activeforeground="#fca5a5",
                   relief="flat", padx=12, pady=4).pack(side="left")
@@ -4339,7 +4671,7 @@ class MascotaApp:
             ch = self.data_store.get_active_character() or {}
 
             # Sprite set
-            section_label("SPRITE (personaje visual)")
+            section_label(T("char_section_sprite"))
             available = self.sprite_renderer.available_sets()
             make_option_row(
                 [(s, s) for s in available],
@@ -4352,9 +4684,9 @@ class MascotaApp:
             )
 
             # Tinte
-            section_label("COLOR")
+            section_label(T("char_section_color"))
             make_option_row(
-                [(k, l, rgb) for k, l, rgb, _ in MASCOT_TINTS if rgb is not None or k == "original"],
+                _xlate_opts([(k, l, rgb) for k, l, rgb, _ in MASCOT_TINTS if rgb is not None or k == "original"]),
                 lambda: (self.data_store.get_active_character() or {}).get("tint", "original"),
                 lambda k: (self.data_store.update_active_character(char_id=char_id, tint=k),
                            self.sprite_renderer.invalidate()),
@@ -4362,9 +4694,9 @@ class MascotaApp:
             )
 
             # Contorno
-            section_label("CONTORNO")
+            section_label(T("char_section_outline"))
             make_option_row(
-                OUTLINE_OPTIONS,
+                _xlate_opts(OUTLINE_OPTIONS),
                 lambda: (self.data_store.get_active_character() or {}).get("outline", "ninguno"),
                 lambda k: (self.data_store.update_active_character(char_id=char_id, outline=k),
                            self.sprite_renderer.invalidate()),
@@ -4372,12 +4704,12 @@ class MascotaApp:
             )
 
             # Objeto flotante
-            section_label("OBJETO FLOTANTE")
-            tk.Label(body, text="Flota sobre la mascota en todas las animaciones.",
+            section_label(T("char_section_float"))
+            tk.Label(body, text=T("char_float_hint"),
                      fg="#475569", bg="#111827",
                      font=("Microsoft YaHei UI", 7)).pack(anchor="w", padx=16)
             make_option_row(
-                FLOATING_ITEMS,
+                _xlate_opts(FLOATING_ITEMS),
                 lambda: (self.data_store.get_active_character() or {}).get("floating_item", "ninguno"),
                 lambda k: self.data_store.update_active_character(char_id=char_id, floating_item=k),
                 cols=4,
@@ -4390,7 +4722,7 @@ class MascotaApp:
 
     def open_alarms(self) -> None:
         win = tk.Toplevel(self.root)
-        win.title("Alarmas y Descansos")
+        win.title(T("alarms_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, True)
@@ -4402,7 +4734,7 @@ class MascotaApp:
         hdr = tk.Frame(win, bg="#0f172a")
         hdr.pack(fill="x")
         today_str = time.strftime("%A %d/%m/%Y")
-        tk.Label(hdr, text="Planificación", fg="#f8fafc", bg="#0f172a",
+        tk.Label(hdr, text=T("alarms_header"), fg="#f8fafc", bg="#0f172a",
                  font=("Microsoft YaHei UI", 12, "bold")).pack(side="left", padx=14, pady=10)
         tk.Label(hdr, text=today_str, fg="#64748b", bg="#0f172a",
                  font=("Microsoft YaHei UI", 9)).pack(side="right", padx=14)
@@ -4412,13 +4744,13 @@ class MascotaApp:
         tab_bar.pack(fill="x")
         tk.Frame(tab_bar, height=1, bg="#334155").pack(fill="x", side="bottom")
 
-        tab_alarm_btn = tk.Button(tab_bar, text="Alarmas 🔔", relief="flat",
+        tab_alarm_btn = tk.Button(tab_bar, text=T("alarms_tab_alarms"), relief="flat",
                                   bg="#0f172a", fg="#fbbf24", padx=14, pady=7,
                                   font=("Microsoft YaHei UI", 9, "bold"),
                                   activebackground="#111827", activeforeground="#fbbf24",
                                   bd=0, highlightthickness=0)
         tab_alarm_btn.pack(side="left")
-        tab_break_btn = tk.Button(tab_bar, text="Descansos ☕", relief="flat",
+        tab_break_btn = tk.Button(tab_bar, text=T("alarms_tab_breaks"), relief="flat",
                                   bg="#0f172a", fg="#64748b", padx=14, pady=7,
                                   font=("Microsoft YaHei UI", 9),
                                   activebackground="#111827", activeforeground="#94a3b8",
@@ -4437,7 +4769,7 @@ class MascotaApp:
         tk.Frame(add_frame, height=1, bg="#334155").pack(fill="x")
         add_inner = tk.Frame(add_frame, bg="#0f172a")
         add_inner.pack(fill="x", padx=10, pady=8)
-        tk.Label(add_inner, text="Agregar alarma", fg="#64748b", bg="#0f172a",
+        tk.Label(add_inner, text=T("alarms_add_label"), fg="#64748b", bg="#0f172a",
                  font=("Microsoft YaHei UI", 8)).pack(anchor="w", pady=(0, 4))
 
         input_row = tk.Frame(add_inner, bg="#0f172a")
@@ -4472,10 +4804,11 @@ class MascotaApp:
                                highlightthickness=1, highlightbackground="#334155",
                                width=14)
         label_entry.pack(side="left", ipady=4, padx=(0, 6))
-        label_entry.insert(0, "Etiqueta")
+        _placeholder = T("alarms_placeholder")
+        label_entry.insert(0, _placeholder)
 
         def _clear_placeholder(e: Any) -> None:
-            if label_var.get() == "Etiqueta":
+            if label_var.get() == _placeholder:
                 label_entry.delete(0, "end")
         label_entry.bind("<FocusIn>", _clear_placeholder)
 
@@ -4483,13 +4816,13 @@ class MascotaApp:
             h = str(hour_var.get()).zfill(2)
             m = str(minute_var.get()).zfill(2)
             lbl = label_var.get().strip()
-            if not lbl or lbl == "Etiqueta":
-                lbl = "Recordatorio"
+            if not lbl or lbl == _placeholder:
+                lbl = T("alarms_default_lbl")
             self.alarm_system.add_alarm(lbl, f"{h}:{m}")
-            label_var.set("Etiqueta")
+            label_var.set(_placeholder)
             refresh_list()
 
-        tk.Button(input_row, text="Agregar", command=add_alarm_action,
+        tk.Button(input_row, text=T("alarms_add_btn"), command=add_alarm_action,
                   bg="#2563eb", fg="white",
                   activebackground="#1d4ed8", activeforeground="white",
                   relief="flat", padx=8, pady=4,
@@ -4521,7 +4854,7 @@ class MascotaApp:
             alarms = self.alarm_system.get_alarms()
             today = time.strftime("%Y-%m-%d")
             if not alarms:
-                tk.Label(list_frame, text="No hay alarmas configuradas.",
+                tk.Label(list_frame, text=T("alarms_empty"),
                          fg="#475569", bg="#111827",
                          font=("Microsoft YaHei UI", 9)).pack(pady=20)
                 return
@@ -4591,11 +4924,11 @@ class MascotaApp:
             m["menu"].configure(bg="#0f172a", fg="#f8fafc", activebackground="#1e293b")
             return m
 
-        brk_section("RECORDATORIOS DE DESCANSO")
+        brk_section(T("alarms_break_section"))
         break_var = tk.BooleanVar(value=bool(self.data_store.get("break_enabled")))
         def on_break(*_: Any) -> None:
             self.data_store.set("break_enabled", break_var.get())
-        tk.Checkbutton(break_tab, text="Activar recordatorios de descanso",
+        tk.Checkbutton(break_tab, text=T("alarms_break_enabled"),
                        variable=break_var, command=on_break,
                        bg="#111827", fg="#f8fafc", activebackground="#111827",
                        activeforeground="#f8fafc", selectcolor="#0f172a",
@@ -4608,7 +4941,7 @@ class MascotaApp:
             self.data_store.set("break_interval_minutes", interval_map.get(interval_var.get(), 50))
         interval_var.trace_add("write", on_interval)
         r1 = brk_row()
-        tk.Label(r1, text="Intervalo de trabajo:", fg="#cbd5e1", bg="#111827",
+        tk.Label(r1, text=T("alarms_interval_label"), fg="#cbd5e1", bg="#111827",
                  font=("Microsoft YaHei UI", 9)).pack(side="left")
         brk_menu(r1, interval_var, list(interval_map.keys())).pack(side="left", padx=(6, 0))
 
@@ -4620,7 +4953,7 @@ class MascotaApp:
             self.data_store.set("break_duration_minutes", duration_map.get(duration_var.get(), 5))
         duration_var.trace_add("write", on_duration)
         r_dur = brk_row()
-        tk.Label(r_dur, text="Duración del descanso:", fg="#cbd5e1", bg="#111827",
+        tk.Label(r_dur, text=T("alarms_duration_label"), fg="#cbd5e1", bg="#111827",
                  font=("Microsoft YaHei UI", 9)).pack(side="left")
         brk_menu(r_dur, duration_var, list(duration_map.keys())).pack(side="left", padx=(6, 0))
 
@@ -4643,20 +4976,20 @@ class MascotaApp:
         show_alarm_tab()
 
         # ── Close button ──────────────────────────────────────────
-        tk.Button(win, text="Cerrar", command=win.destroy,
+        tk.Button(win, text=T("alarms_close"), command=win.destroy,
                   bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=12, pady=4).pack(side="bottom", pady=8)
 
     def open_settings(self) -> None:
         win = tk.Toplevel(self.root)
-        win.title("Configuracion")
+        win.title(T("settings_title"))
         win.configure(bg="#111827")
         self._register_dialog(win)
         win.resizable(False, False)
 
         x, y = self._dialog_xy()
-        win.geometry(f"270x320+{x}+{y}")
+        win.geometry(f"270x390+{x}+{y}")
 
         def section(text: str) -> None:
             tk.Label(win, text=text, fg="#64748b", bg="#111827",
@@ -4675,78 +5008,77 @@ class MascotaApp:
             m["menu"].configure(bg="#0f172a", fg="#f8fafc", activebackground="#1e293b")
             return m
 
+        # Language
+        section(T("settings_lang_section"))
+        lang_map = {"English": "en", "Español": "es"}
+        cur_lang_key = next((k for k, v in lang_map.items() if v == _LANG), "English")
+        lang_var = tk.StringVar(value=cur_lang_key)
+        def on_lang(*_: Any) -> None:
+            global _LANG
+            new_lang = lang_map.get(lang_var.get(), "en")
+            _LANG = new_lang
+            self.data_store.set("language", new_lang)
+        lang_var.trace_add("write", on_lang)
+        r_lang = row_frame()
+        styled_menu(r_lang, lang_var, list(lang_map.keys())).pack(side="left")
+
         # XP
-        section("SISTEMA DE XP")
+        section(T("settings_xp_section"))
         _char = self.data_store.get_active_character()
         xp_var = tk.BooleanVar(value=bool(_char.get("xp_enabled", True) if _char else True))
         def on_xp(*_: Any) -> None:
             self.data_store.update_active_character(xp_enabled=xp_var.get())
-        tk.Checkbutton(win, text="XP activado", variable=xp_var, command=on_xp,
+        tk.Checkbutton(win, text=T("settings_xp_enabled"), variable=xp_var, command=on_xp,
                        bg="#111827", fg="#f8fafc", activebackground="#111827",
                        activeforeground="#f8fafc", selectcolor="#0f172a",
                        relief="flat").pack(anchor="w", padx=24)
 
-        # Appearance
-        section("APARIENCIA")
-        opacity_map = {"60%": 0.6, "80%": 0.8, "100%": 1.0}
-        cur_op = float(self.data_store.get("opacity"))
-        closest = min(opacity_map, key=lambda k: abs(opacity_map[k] - cur_op))
-        opacity_var = tk.StringVar(value=closest)
-        def on_opacity(*_: Any) -> None:
-            val = opacity_map.get(opacity_var.get(), 1.0)
-            self.data_store.set("opacity", val)
-            self.root.wm_attributes("-alpha", val)
-        opacity_var.trace_add("write", on_opacity)
-        r2 = row_frame()
-        tk.Label(r2, text="Opacidad:", fg="#cbd5e1", bg="#111827",
-                 font=("Microsoft YaHei UI", 9)).pack(side="left")
-        styled_menu(r2, opacity_var, list(opacity_map.keys())).pack(side="left", padx=(6, 0))
-
         # Hook de Claude Code
-        section("INTEGRACIÓN CLAUDE CODE")
+        section(T("settings_claude_section"))
         def reinstall_hook() -> None:
             ok, msg = self.installer.install()
             if ok:
-                messagebox.showinfo("Hook instalado", msg, parent=win)
+                messagebox.showinfo(T("hook_installed_title"), msg, parent=win)
             else:
-                messagebox.showerror("Error", msg, parent=win)
-        hook_status = "✓ Instalado" if self.installer.is_installed() else "✗ No instalado"
+                messagebox.showerror(T("hook_error_title"), msg, parent=win)
+        hook_ok = self.installer.is_installed()
+        hook_status = T("settings_hook_status_ok") if hook_ok else T("settings_hook_status_no")
         tk.Label(win, text=f"Estado: {hook_status}",
-                 fg="#3fb950" if self.installer.is_installed() else "#f85149",
+                 fg="#3fb950" if hook_ok else "#f85149",
                  bg="#111827", font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=24)
-        tk.Button(win, text="Instalar / Reinstalar hook",
+        tk.Button(win, text=T("settings_hook_install_btn"),
                   command=reinstall_hook,
                   bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=8, pady=4).pack(anchor="w", padx=24, pady=(2, 0))
 
         # Hook de Codex
-        section("INTEGRACIÓN CODEX (OpenAI)")
+        section(T("settings_codex_section"))
         def reinstall_codex_hook() -> None:
             ok, msg = self.codex_installer.install()
             if ok:
-                messagebox.showinfo("Hook instalado", msg, parent=win)
+                messagebox.showinfo(T("hook_installed_title"), msg, parent=win)
             else:
-                messagebox.showerror("Error", msg, parent=win)
+                messagebox.showerror(T("hook_error_title"), msg, parent=win)
         codex_ok = self.codex_installer.is_installed()
-        codex_status = "✓ Instalado" if codex_ok else "✗ No instalado"
+        codex_status = T("settings_hook_status_ok") if codex_ok else T("settings_hook_status_no")
         codex_available = (Path.home() / ".codex").exists()
-        codex_hint = "" if codex_available else " (Codex no detectado)"
+        codex_hint = "" if codex_available else T("codex_not_detected")
         tk.Label(win, text=f"Estado: {codex_status}{codex_hint}",
                  fg="#3fb950" if codex_ok else "#f85149",
                  bg="#111827", font=("Microsoft YaHei UI", 8)).pack(anchor="w", padx=24)
-        tk.Button(win, text="Instalar / Reinstalar hook",
+        tk.Button(win, text=T("settings_hook_install_btn"),
                   command=reinstall_codex_hook,
                   bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=8, pady=4).pack(anchor="w", padx=24, pady=(2, 0))
 
-        # Acceso directo
-        section("ACCESO DIRECTO")
+        # Acceso directo / Shortcut
+        section(T("settings_shortcut_section"))
         def create_shortcut() -> None:
             vbs_src = self.base_dir / "Iniciar Mascota.vbs"
             if not vbs_src.exists():
-                messagebox.showerror("Error", "No se encontró 'Iniciar Mascota.vbs'", parent=win)
+                messagebox.showerror(T("hook_error_title"), T("shortcut_err_no_vbs"), parent=win)
                 return
             desktop = Path.home() / "Desktop"
             if not desktop.exists():
@@ -4754,21 +5086,22 @@ class MascotaApp:
             if not desktop.exists():
                 desktop = Path.home() / "OneDrive" / "Desktop"
             if not desktop.exists():
-                messagebox.showerror("Error", "No se encontró la carpeta Desktop.", parent=win)
+                messagebox.showerror(T("hook_error_title"), T("shortcut_err_no_desktop"), parent=win)
                 return
             try:
                 shutil.copy(str(vbs_src), str(desktop / "Iniciar Mascota.vbs"))
-                messagebox.showinfo("Listo", f"Acceso directo creado en:\n{desktop}", parent=win)
+                messagebox.showinfo(T("shortcut_ok_title"),
+                                    T("shortcut_ok_fmt").format(path=desktop), parent=win)
             except Exception as exc:
-                messagebox.showerror("Error", str(exc), parent=win)
+                messagebox.showerror(T("hook_error_title"), str(exc), parent=win)
 
-        tk.Button(win, text="Crear acceso directo en Escritorio",
+        tk.Button(win, text=T("settings_shortcut_btn"),
                   command=create_shortcut,
                   bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=8, pady=4).pack(anchor="w", padx=24, pady=(2, 0))
 
-        tk.Button(win, text="Cerrar", command=win.destroy, bg="#1f2937", fg="#cbd5e1",
+        tk.Button(win, text=T("settings_close"), command=win.destroy, bg="#1f2937", fg="#cbd5e1",
                   activebackground="#374151", activeforeground="#f8fafc",
                   relief="flat", padx=12, pady=4).pack(side="bottom", pady=10)
 
@@ -4793,6 +5126,11 @@ class MascotaApp:
         self.server.server_close()
         if self.instance_mutex:
             ctypes.windll.kernel32.CloseHandle(self.instance_mutex)
+        for _w in [self.house_win, self.sprite_shield]:
+            try:
+                _w.destroy()
+            except Exception:
+                pass
         self.root.destroy()
 
 
