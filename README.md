@@ -65,6 +65,7 @@ Six background scenes unlock as Dino levels up.
 
 - **Character** — tint color, outline, floating accessories (crown, star, halo, lightning, heart, note, zzz), draggable decorations
 - **Scene** — 10 grass color themes, 6 unlockable backgrounds
+- **BG toggle** — the toolbar **BG** button shows or hides the entire background scene; when off, only the characters float over your desktop
 - **Alarms** — named alarms with snooze, scheduled to the minute
 - **Breaks** — automatic reminders at a configurable interval and duration
 
