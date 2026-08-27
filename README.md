@@ -66,7 +66,7 @@ Six background scenes unlock as Dino levels up.
 - **Character** — tint color, outline, floating accessories (crown, star, halo, lightning, heart, note, zzz), draggable decorations
 - **Scene** — 10 grass color themes, 6 unlockable backgrounds
 - **BG toggle** — the toolbar **BG** button shows or hides the entire background scene; when off, only the characters float over your desktop
-- **Alarms** — named alarms with snooze, scheduled to the minute
+- **Alarms** — named alarms with snooze, scheduled to the minute, daily or on chosen days of the month
 - **Breaks** — automatic reminders at a configurable interval and duration
 
 ---
@@ -81,7 +81,9 @@ Six background scenes unlock as Dino levels up.
 
 **Productivity**
 - Break reminders with configurable interval and duration
-- Named alarms with snooze
+- Named alarms with snooze — every day, or only on the days of the month you pick (`1,15`)
+- Monthly alarms catch up: Dino only runs while you work, so an alarm for the 1st that you
+  missed fires the next time you open the app, not next month
 - XP system — Dino gains experience as you work and levels up over time
 
 **Mini-game**

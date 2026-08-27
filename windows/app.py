@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import calendar
 import json
 import math
 import random
@@ -216,6 +217,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "alarms_default_lbl": "Reminder",
         "alarms_add_btn": "Add",
         "alarms_empty": "No alarms configured.",
+        "alarms_days_label": "Days of month — empty means every day",
+        "alarms_days_hint": "1,15",
+        "alarms_days_badge": "day",
         "alarms_break_section": "BREAK REMINDERS",
         "alarms_break_enabled": "Enable break reminders",
         "alarms_interval_label": "Work interval:",
@@ -294,6 +298,9 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "alarms_default_lbl": "Recordatorio",
         "alarms_add_btn": "Agregar",
         "alarms_empty": "No hay alarmas configuradas.",
+        "alarms_days_label": "Días del mes — vacío es todos los días",
+        "alarms_days_hint": "1,15",
+        "alarms_days_badge": "día",
         "alarms_break_section": "RECORDATORIOS DE DESCANSO",
         "alarms_break_enabled": "Activar recordatorios de descanso",
         "alarms_interval_label": "Intervalo de trabajo:",
@@ -683,6 +690,23 @@ class BreakSystem:
         return self.MESSAGES[self._msg_index % len(self.MESSAGES)]
 
 
+def parse_days_of_month(text: str) -> list[int]:
+    """'1, 15' -> [1, 15]. Anything unparseable is dropped, not an error: this comes
+    straight from a text box and a typo should not lose the whole alarm."""
+    days: list[int] = []
+    for chunk in str(text or "").replace(";", ",").replace(" ", ",").split(","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        try:
+            n = int(chunk)
+        except ValueError:
+            continue
+        if 1 <= n <= 31 and n not in days:
+            days.append(n)
+    return sorted(days)
+
+
 class AlarmSystem:
     def __init__(self, store: DataStore) -> None:
         self._store = store
@@ -690,7 +714,8 @@ class AlarmSystem:
     def get_alarms(self) -> list[dict]:
         return list(self._store.get("alarms") or [])
 
-    def add_alarm(self, label: str, time_str: str) -> None:
+    def add_alarm(self, label: str, time_str: str,
+                  days_of_month: list[int] | None = None) -> None:
         alarms = self.get_alarms()
         existing_ids = {a["id"] for a in alarms}
         counter = len(alarms) + 1
@@ -702,8 +727,15 @@ class AlarmSystem:
             "id": new_id,
             "label": label.strip() or "Recordatorio",
             "time": time_str,
+            # Empty = every day, which is how every alarm behaved before this field
+            # existed. Old alarms have no key at all and keep working unchanged.
+            "days_of_month": sorted(days_of_month or []),
             "enabled": True,
             "triggered_date": "",
+            # Only used by monthly alarms: without it, an alarm added on the 20th for
+            # day 15 would fire the moment you saved it, because the catch-up below
+            # would see the 15th as a missed run.
+            "created_date": time.strftime("%Y-%m-%d"),
             "snooze_until": 0.0,
         })
         self._store.set("alarms", alarms)
@@ -720,15 +752,67 @@ class AlarmSystem:
                 break
         self._store.set("alarms", alarms)
 
+    @staticmethod
+    def _recent_months(now: time.struct_time) -> list[tuple[int, int]]:
+        y, m = now.tm_year, now.tm_mon
+        prev = (y - 1, 12) if m == 1 else (y, m - 1)
+        return [prev, (y, m)]
+
+    def _last_scheduled(self, alarm: dict, now: time.struct_time) -> str | None:
+        """For a monthly alarm, the date it was last supposed to go off, or None if
+        that moment has not come yet.
+
+        This is the catch-up, and it is the whole reason monthly alarms work here:
+        Pixel Companion only runs while you are working, so an alarm set for the 1st
+        would never fire at all if you did not open the app that day. Looking back at
+        the last scheduled date instead of just "is it today" means it fires the next
+        time you do open it, and stops as soon as it fires, because triggered_date
+        moves past this date. It looks back one month at most, so a laptop that was
+        off for a season does not queue up a year of alarms.
+        """
+        days = alarm.get("days_of_month") or []
+        if not days:
+            return None
+        hm = alarm.get("time", "")
+        created = str(alarm.get("created_date", ""))
+        today = time.strftime("%Y-%m-%d", now)
+        now_hm = time.strftime("%H:%M", now)
+        best: str | None = None
+        for year, month in self._recent_months(now):
+            last_day = calendar.monthrange(year, month)[1]
+            for d in days:
+                # Day 31 in a 30-day month lands on the last day of that month. The
+                # alternative is that it silently never fires, which is the worst kind
+                # of reminder: one you think you set.
+                stamp = f"{year:04d}-{month:02d}-{min(d, last_day):02d}"
+                if stamp > today:
+                    continue
+                if stamp == today and hm > now_hm:
+                    continue
+                if created and stamp < created:
+                    continue
+                if best is None or stamp > best:
+                    best = stamp
+        return best
+
     def check_due(self) -> dict | None:
-        today = time.strftime("%Y-%m-%d")
-        now_hm = time.strftime("%H:%M")
+        now = time.localtime()
+        today = time.strftime("%Y-%m-%d", now)
+        now_hm = time.strftime("%H:%M", now)
         for a in self.get_alarms():
             if not a.get("enabled", True):
                 continue
-            if a.get("triggered_date") == today:
-                continue
             if time.time() < float(a.get("snooze_until", 0.0)):
+                continue
+
+            if a.get("days_of_month"):
+                due = self._last_scheduled(a, now)
+                if due and str(a.get("triggered_date", "")) < due:
+                    return a
+                continue
+
+            # Daily alarm: no days configured. Untouched from before this feature.
+            if a.get("triggered_date") == today:
                 continue
             if a.get("time", "") <= now_hm:
                 return a
@@ -4818,8 +4902,10 @@ class MascotaApp:
             lbl = label_var.get().strip()
             if not lbl or lbl == _placeholder:
                 lbl = T("alarms_default_lbl")
-            self.alarm_system.add_alarm(lbl, f"{h}:{m}")
+            self.alarm_system.add_alarm(lbl, f"{h}:{m}",
+                                        parse_days_of_month(days_var.get()))
             label_var.set(_placeholder)
+            days_var.set("")
             refresh_list()
 
         tk.Button(input_row, text=T("alarms_add_btn"), command=add_alarm_action,
@@ -4828,7 +4914,25 @@ class MascotaApp:
                   relief="flat", padx=8, pady=4,
                   font=("Microsoft YaHei UI", 9)).pack(side="left")
 
+        # Days of month, on its own row: the row above is already full and this is the
+        # field nobody needs most of the time. Empty = every day, which is what every
+        # alarm did before this existed.
+        days_row = tk.Frame(add_inner, bg="#0f172a")
+        days_row.pack(fill="x", pady=(6, 0))
+        days_var = tk.StringVar()
+        tk.Label(days_row, text=T("alarms_days_label"), fg="#64748b", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 8)).pack(side="left")
+        days_entry = tk.Entry(days_row, textvariable=days_var, width=8,
+                              bg="#1e293b", fg="#f8fafc",
+                              insertbackground="#f8fafc",
+                              relief="flat", font=("Microsoft YaHei UI", 9),
+                              highlightthickness=1, highlightbackground="#334155")
+        days_entry.pack(side="left", ipady=3, padx=(6, 0))
+        tk.Label(days_row, text=T("alarms_days_hint"), fg="#475569", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(6, 0))
+
         label_entry.bind("<Return>", lambda _e: add_alarm_action())
+        days_entry.bind("<Return>", lambda _e: add_alarm_action())
 
         scroll_canvas = tk.Canvas(alarm_tab, bg="#111827", highlightthickness=0)
         scrollbar = tk.Scrollbar(alarm_tab, orient="vertical", command=scroll_canvas.yview)
@@ -4874,6 +4978,16 @@ class MascotaApp:
                 tk.Label(row, text=time_lbl, fg=time_color, bg="#1e293b",
                          font=("Microsoft YaHei UI", 10, "bold"),
                          width=8, anchor="w").pack(side="left", padx=(8, 4))
+
+                # Only shown when there are days: a daily alarm is the default and does
+                # not need a badge saying so.
+                days = alarm.get("days_of_month") or []
+                if days:
+                    tk.Label(row,
+                             text=f"{T('alarms_days_badge')} {','.join(str(d) for d in days)}",
+                             fg="#64748b" if (not enabled or triggered) else "#38bdf8",
+                             bg="#1e293b", font=("Microsoft YaHei UI", 8),
+                             anchor="w").pack(side="left", padx=(0, 4))
 
                 lbl_text = alarm.get("label", "")
                 if snoozed:
