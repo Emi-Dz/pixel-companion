@@ -3109,7 +3109,15 @@ class MascotaApp:
         if not self.data_store.get("characters"):
             self.root.after(600, self._show_first_use_popup)
         if self.data_store.get("greeted_date") != time.strftime("%Y-%m-%d"):
-            self.data_store.set("alarms", [])
+            # The first launch of a new day clears the day's one-off reminders, but a
+            # monthly alarm has to survive it: it is set once and has to still be there
+            # weeks later, on the day it is meant to fire. Wiping it here deleted it the
+            # morning after it was created, which is the worst kind of reminder, one you
+            # think you set.
+            self.data_store.set("alarms", [
+                a for a in (self.data_store.get("alarms") or [])
+                if a.get("days_of_month")
+            ])
             self.root.after(800, self._show_daily_greeting)
 
     @staticmethod
