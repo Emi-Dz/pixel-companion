@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+import datetime
 import json
 import math
 import random
@@ -217,9 +218,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "alarms_default_lbl": "Reminder",
         "alarms_add_btn": "Add",
         "alarms_empty": "No alarms configured.",
-        "alarms_days_label": "Days of month — empty means every day",
+        "alarms_repeat_label": "Repeat:",
+        "alarms_repeat_once": "Once",
+        "alarms_repeat_daily": "Every day",
+        "alarms_repeat_weekly": "Weekdays",
+        "alarms_repeat_monthly": "Days of month",
+        "alarms_weekday_letters": "MTWTFSS",
+        "alarms_days_label": "Days of month:",
         "alarms_days_hint": "1,15",
         "alarms_days_badge": "day",
+        "alarms_badge_once": "once",
+        "alarms_badge_daily": "every day",
         "alarms_break_section": "BREAK REMINDERS",
         "alarms_break_enabled": "Enable break reminders",
         "alarms_interval_label": "Work interval:",
@@ -298,9 +307,17 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "alarms_default_lbl": "Recordatorio",
         "alarms_add_btn": "Agregar",
         "alarms_empty": "No hay alarmas configuradas.",
-        "alarms_days_label": "Días del mes — vacío es todos los días",
+        "alarms_repeat_label": "Repetir:",
+        "alarms_repeat_once": "Una vez",
+        "alarms_repeat_daily": "Todos los días",
+        "alarms_repeat_weekly": "Días de semana",
+        "alarms_repeat_monthly": "Días del mes",
+        "alarms_weekday_letters": "LMXJVSD",
+        "alarms_days_label": "Días del mes:",
         "alarms_days_hint": "1,15",
         "alarms_days_badge": "día",
+        "alarms_badge_once": "una vez",
+        "alarms_badge_daily": "todos los días",
         "alarms_break_section": "RECORDATORIOS DE DESCANSO",
         "alarms_break_enabled": "Activar recordatorios de descanso",
         "alarms_interval_label": "Intervalo de trabajo:",
@@ -707,6 +724,45 @@ def parse_days_of_month(text: str) -> list[int]:
     return sorted(days)
 
 
+# How often an alarm repeats. Monday is 0, like time.struct_time.tm_wday.
+REPEAT_ONCE = "once"
+REPEAT_DAILY = "daily"
+REPEAT_WEEKLY = "weekly"
+REPEAT_MONTHLY = "monthly"
+REPEAT_MODES = (REPEAT_ONCE, REPEAT_DAILY, REPEAT_WEEKLY, REPEAT_MONTHLY)
+
+
+def alarm_repeat(alarm: dict) -> str:
+    """How often an alarm repeats, including alarms saved before the field existed.
+
+    An old alarm with days of the month is monthly; one with nothing configured is a
+    one-off. That last one used to be *described* as "every day" and the engine did
+    fire it every day — but the first launch of the next day wiped it, so in practice
+    it was a reminder for today and nothing more. Calling it `once` is what actually
+    happened. `daily` now means daily and survives the morning.
+    """
+    mode = str(alarm.get("repeat") or "")
+    if mode in REPEAT_MODES:
+        return mode
+    if alarm.get("days_of_month"):
+        return REPEAT_MONTHLY
+    if alarm.get("days_of_week"):
+        return REPEAT_WEEKLY
+    return REPEAT_ONCE
+
+
+def _clean_days(values: Any, low: int, high: int) -> list[int]:
+    out: list[int] = []
+    for v in (values or []):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            continue
+        if low <= n <= high and n not in out:
+            out.append(n)
+    return sorted(out)
+
+
 class AlarmSystem:
     def __init__(self, store: DataStore) -> None:
         self._store = store
@@ -715,7 +771,21 @@ class AlarmSystem:
         return list(self._store.get("alarms") or [])
 
     def add_alarm(self, label: str, time_str: str,
-                  days_of_month: list[int] | None = None) -> None:
+                  days_of_month: list[int] | None = None,
+                  repeat: str | None = None,
+                  days_of_week: list[int] | None = None) -> None:
+        dom = _clean_days(days_of_month, 1, 31)
+        dow = _clean_days(days_of_week, 0, 6)
+        if repeat not in REPEAT_MODES:
+            # Callers written before the field existed said it with the arguments.
+            repeat = (REPEAT_MONTHLY if dom
+                      else REPEAT_WEEKLY if dow
+                      else REPEAT_ONCE)
+        # A weekly alarm with no weekday ticked and a monthly one with an empty box can
+        # never fire. Daily is the honest fallback and the badge in the list says so, so
+        # it is a visible choice rather than an alarm that quietly never goes off.
+        if (repeat == REPEAT_MONTHLY and not dom) or (repeat == REPEAT_WEEKLY and not dow):
+            repeat = REPEAT_DAILY
         alarms = self.get_alarms()
         existing_ids = {a["id"] for a in alarms}
         counter = len(alarms) + 1
@@ -727,12 +797,15 @@ class AlarmSystem:
             "id": new_id,
             "label": label.strip() or "Recordatorio",
             "time": time_str,
-            # Empty = every day, which is how every alarm behaved before this field
-            # existed. Old alarms have no key at all and keep working unchanged.
-            "days_of_month": sorted(days_of_month or []),
+            # Written down explicitly instead of inferred from an empty list: an empty
+            # list used to mean "every day" to the engine and "delete me tomorrow" to
+            # the daily greeting, and the greeting won.
+            "repeat": repeat,
+            "days_of_month": dom,
+            "days_of_week": dow,
             "enabled": True,
             "triggered_date": "",
-            # Only used by monthly alarms: without it, an alarm added on the 20th for
+            # Only used by the catch-up: without it, an alarm added on the 20th for
             # day 15 would fire the moment you saved it, because the catch-up below
             # would see the 15th as a missed run.
             "created_date": time.strftime("%Y-%m-%d"),
@@ -758,9 +831,20 @@ class AlarmSystem:
         prev = (y - 1, 12) if m == 1 else (y, m - 1)
         return [prev, (y, m)]
 
+    @staticmethod
+    def _already_passed(stamp: str, hm: str, today: str,
+                        now_hm: str, created: str) -> bool:
+        if stamp > today:
+            return False
+        if stamp == today and hm > now_hm:
+            return False
+        if created and stamp < created:
+            return False
+        return True
+
     def _last_scheduled(self, alarm: dict, now: time.struct_time) -> str | None:
-        """For a monthly alarm, the date it was last supposed to go off, or None if
-        that moment has not come yet.
+        """For a weekly or monthly alarm, the date it was last supposed to go off, or
+        None if that moment has not come yet.
 
         This is the catch-up, and it is the whole reason monthly alarms work here:
         Pixel Companion only runs while you are working, so an alarm set for the 1st
@@ -770,13 +854,31 @@ class AlarmSystem:
         moves past this date. It looks back one month at most, so a laptop that was
         off for a season does not queue up a year of alarms.
         """
-        days = alarm.get("days_of_month") or []
-        if not days:
-            return None
+        mode = alarm_repeat(alarm)
         hm = alarm.get("time", "")
         created = str(alarm.get("created_date", ""))
         today = time.strftime("%Y-%m-%d", now)
         now_hm = time.strftime("%H:%M", now)
+
+        if mode == REPEAT_WEEKLY:
+            wanted = set(alarm.get("days_of_week") or [])
+            if not wanted:
+                return None
+            base = datetime.date(now.tm_year, now.tm_mon, now.tm_mday)
+            # Walk back a week at most, so a PC that was off for a month does not
+            # queue up four Mondays. The first match going backwards is the latest.
+            for back in range(7):
+                day = base - datetime.timedelta(days=back)
+                if day.weekday() not in wanted:
+                    continue
+                stamp = day.isoformat()
+                if self._already_passed(stamp, hm, today, now_hm, created):
+                    return stamp
+            return None
+
+        days = alarm.get("days_of_month") or []
+        if not days:
+            return None
         best: str | None = None
         for year, month in self._recent_months(now):
             last_day = calendar.monthrange(year, month)[1]
@@ -785,11 +887,7 @@ class AlarmSystem:
                 # alternative is that it silently never fires, which is the worst kind
                 # of reminder: one you think you set.
                 stamp = f"{year:04d}-{month:02d}-{min(d, last_day):02d}"
-                if stamp > today:
-                    continue
-                if stamp == today and hm > now_hm:
-                    continue
-                if created and stamp < created:
+                if not self._already_passed(stamp, hm, today, now_hm, created):
                     continue
                 if best is None or stamp > best:
                     best = stamp
@@ -805,13 +903,14 @@ class AlarmSystem:
             if time.time() < float(a.get("snooze_until", 0.0)):
                 continue
 
-            if a.get("days_of_month"):
+            if alarm_repeat(a) in (REPEAT_WEEKLY, REPEAT_MONTHLY):
                 due = self._last_scheduled(a, now)
                 if due and str(a.get("triggered_date", "")) < due:
                     return a
                 continue
 
-            # Daily alarm: no days configured. Untouched from before this feature.
+            # Once and daily: both fire when the clock passes the hour, at most once a
+            # day. What separates them is whether tomorrow's greeting deletes them.
             if a.get("triggered_date") == today:
                 continue
             if a.get("time", "") <= now_hm:
@@ -3109,14 +3208,14 @@ class MascotaApp:
         if not self.data_store.get("characters"):
             self.root.after(600, self._show_first_use_popup)
         if self.data_store.get("greeted_date") != time.strftime("%Y-%m-%d"):
-            # The first launch of a new day clears the day's one-off reminders, but a
-            # monthly alarm has to survive it: it is set once and has to still be there
-            # weeks later, on the day it is meant to fire. Wiping it here deleted it the
-            # morning after it was created, which is the worst kind of reminder, one you
-            # think you set.
+            # The first launch of a new day clears the day's one-off reminders, and only
+            # those: anything that repeats has to survive it. Keeping only the alarms
+            # with days of the month deleted the daily and weekly ones the morning after
+            # they were created, while the field said "empty means every day" — the
+            # worst kind of reminder, one you think you set.
             self.data_store.set("alarms", [
                 a for a in (self.data_store.get("alarms") or [])
-                if a.get("days_of_month")
+                if alarm_repeat(a) != REPEAT_ONCE
             ])
             self.root.after(800, self._show_daily_greeting)
 
@@ -4910,10 +5009,15 @@ class MascotaApp:
             lbl = label_var.get().strip()
             if not lbl or lbl == _placeholder:
                 lbl = T("alarms_default_lbl")
-            self.alarm_system.add_alarm(lbl, f"{h}:{m}",
-                                        parse_days_of_month(days_var.get()))
+            self.alarm_system.add_alarm(
+                lbl, f"{h}:{m}",
+                parse_days_of_month(days_var.get()),
+                repeat=repeat_var.get(),
+                days_of_week=[i for i, v in enumerate(weekday_vars) if v.get()])
             label_var.set(_placeholder)
             days_var.set("")
+            for v in weekday_vars:
+                v.set(False)
             refresh_list()
 
         tk.Button(input_row, text=T("alarms_add_btn"), command=add_alarm_action,
@@ -4922,22 +5026,67 @@ class MascotaApp:
                   relief="flat", padx=8, pady=4,
                   font=("Microsoft YaHei UI", 9)).pack(side="left")
 
-        # Days of month, on its own row: the row above is already full and this is the
-        # field nobody needs most of the time. Empty = every day, which is what every
-        # alarm did before this existed.
-        days_row = tk.Frame(add_inner, bg="#0f172a")
-        days_row.pack(fill="x", pady=(6, 0))
-        days_var = tk.StringVar()
-        tk.Label(days_row, text=T("alarms_days_label"), fg="#64748b", bg="#0f172a",
+        # How often it repeats, on its own row: the row above is already full, and this
+        # is the field that decides whether the alarm is still there tomorrow, so it is
+        # written down instead of guessed from an empty box.
+        repeat_var = tk.StringVar(value=REPEAT_DAILY)
+        repeat_row = tk.Frame(add_inner, bg="#0f172a")
+        repeat_row.pack(fill="x", pady=(6, 0))
+        tk.Label(repeat_row, text=T("alarms_repeat_label"), fg="#64748b", bg="#0f172a",
                  font=("Microsoft YaHei UI", 8)).pack(side="left")
-        days_entry = tk.Entry(days_row, textvariable=days_var, width=8,
+
+        # Only the row that the chosen mode needs is shown, so there is never a box on
+        # screen that does nothing.
+        detail_row = tk.Frame(add_inner, bg="#0f172a")
+        detail_row.pack(fill="x", pady=(4, 0))
+
+        # Weekday toggles, Monday first to match time.struct_time.tm_wday.
+        week_frame = tk.Frame(detail_row, bg="#0f172a")
+        _letters = T("alarms_weekday_letters")
+        weekday_vars: list[tk.BooleanVar] = []
+        for _i in range(7):
+            _v = tk.BooleanVar(value=False)
+            weekday_vars.append(_v)
+            tk.Checkbutton(week_frame, text=_letters[_i:_i + 1] or str(_i + 1),
+                           variable=_v, indicatoron=False, width=2,
+                           bg="#1e293b", fg="#94a3b8", selectcolor="#2563eb",
+                           activebackground="#334155", activeforeground="#f8fafc",
+                           relief="flat", borderwidth=0, highlightthickness=0,
+                           font=("Microsoft YaHei UI", 8)).pack(side="left", padx=1)
+
+        dom_frame = tk.Frame(detail_row, bg="#0f172a")
+        days_var = tk.StringVar()
+        tk.Label(dom_frame, text=T("alarms_days_label"), fg="#64748b", bg="#0f172a",
+                 font=("Microsoft YaHei UI", 8)).pack(side="left")
+        days_entry = tk.Entry(dom_frame, textvariable=days_var, width=8,
                               bg="#1e293b", fg="#f8fafc",
                               insertbackground="#f8fafc",
                               relief="flat", font=("Microsoft YaHei UI", 9),
                               highlightthickness=1, highlightbackground="#334155")
         days_entry.pack(side="left", ipady=3, padx=(6, 0))
-        tk.Label(days_row, text=T("alarms_days_hint"), fg="#475569", bg="#0f172a",
+        tk.Label(dom_frame, text=T("alarms_days_hint"), fg="#475569", bg="#0f172a",
                  font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(6, 0))
+
+        def _sync_detail() -> None:
+            week_frame.pack_forget()
+            dom_frame.pack_forget()
+            mode = repeat_var.get()
+            if mode == REPEAT_WEEKLY:
+                week_frame.pack(side="left")
+            elif mode == REPEAT_MONTHLY:
+                dom_frame.pack(side="left")
+
+        for _mode, _key in ((REPEAT_ONCE, "alarms_repeat_once"),
+                            (REPEAT_DAILY, "alarms_repeat_daily"),
+                            (REPEAT_WEEKLY, "alarms_repeat_weekly"),
+                            (REPEAT_MONTHLY, "alarms_repeat_monthly")):
+            tk.Radiobutton(repeat_row, text=T(_key), variable=repeat_var, value=_mode,
+                           command=_sync_detail,
+                           bg="#0f172a", fg="#94a3b8", selectcolor="#1e293b",
+                           activebackground="#0f172a", activeforeground="#f8fafc",
+                           borderwidth=0, highlightthickness=0,
+                           font=("Microsoft YaHei UI", 8)).pack(side="left", padx=(6, 0))
+        _sync_detail()
 
         label_entry.bind("<Return>", lambda _e: add_alarm_action())
         days_entry.bind("<Return>", lambda _e: add_alarm_action())
@@ -4987,15 +5136,24 @@ class MascotaApp:
                          font=("Microsoft YaHei UI", 10, "bold"),
                          width=8, anchor="w").pack(side="left", padx=(8, 4))
 
-                # Only shown when there are days: a daily alarm is the default and does
-                # not need a badge saying so.
-                days = alarm.get("days_of_month") or []
-                if days:
-                    tk.Label(row,
-                             text=f"{T('alarms_days_badge')} {','.join(str(d) for d in days)}",
-                             fg="#64748b" if (not enabled or triggered) else "#38bdf8",
-                             bg="#1e293b", font=("Microsoft YaHei UI", 8),
-                             anchor="w").pack(side="left", padx=(0, 4))
+                # Every alarm gets a badge now, one-offs included: an alarm that will be
+                # gone tomorrow has to say so while you can still change it.
+                mode = alarm_repeat(alarm)
+                if mode == REPEAT_MONTHLY:
+                    days = alarm.get("days_of_month") or []
+                    badge = f"{T('alarms_days_badge')} {','.join(str(d) for d in days)}"
+                elif mode == REPEAT_WEEKLY:
+                    letters = T("alarms_weekday_letters")
+                    badge = ",".join(letters[d:d + 1] or str(d + 1)
+                                     for d in (alarm.get("days_of_week") or []))
+                elif mode == REPEAT_DAILY:
+                    badge = T("alarms_badge_daily")
+                else:
+                    badge = T("alarms_badge_once")
+                tk.Label(row, text=badge,
+                         fg="#64748b" if (not enabled or triggered) else "#38bdf8",
+                         bg="#1e293b", font=("Microsoft YaHei UI", 8),
+                         anchor="w").pack(side="left", padx=(0, 4))
 
                 lbl_text = alarm.get("label", "")
                 if snoozed:
