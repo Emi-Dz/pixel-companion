@@ -1,6 +1,6 @@
 # pixel-companion — Windows
 
-This folder contains the Windows desktop app and its hook scripts.
+This folder contains the tray app, its hook scripts and the status line segment.
 
 ## Run
 
@@ -8,51 +8,44 @@ This folder contains the Windows desktop app and its hook scripts.
 git clone https://github.com/Emi-Dz/pixel-companion.git
 cd pixel-companion/windows
 pip install -r ../requirements.txt
-python app.py
+pythonw tray.py
 ```
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `app.py` | Main application |
-| `mascota-hook.ps1` | Claude Code hook payload (auto-installed) |
-| `codex-hook.ps1` | Codex hook payload (auto-installed) |
-| `Iniciar Mascota.vbs` | Helper to create a desktop shortcut |
+| `tray.py` | Tray app: one icon, session menu, terminal focus |
+| `mascota-hook.ps1` | Claude Code hook (auto-installed) |
+| `codex-hook.ps1` | Codex hook (auto-installed) |
+| `statusline.ps1` | Claude Code status line segment (Dino + session name + state) |
+| `Iniciar Mascota.vbs` | Starts the tray app silently, for the Startup folder |
 | `assets/sprites/Dino/` | Dino sprite sheets for all 4 states |
-| `sounds/` | Sound effects used by the app and mini-game |
+| `app.py` | Previous floating-window version (scenes, mini-game). Not launched by the hooks. |
 
 ## Hooks
 
-On first launch, the app automatically installs:
+On launch, the tray app makes sure these are installed:
 
-- `~/.claude/hooks/mascota-hook.ps1` — Claude Code hook
-- `~/.codex/mascota-codex-hook.ps1` + entry in `~/.codex/hooks.json` — Codex hook
+- `~/.claude/hooks/mascota-hook.ps1` + entries in `~/.claude/settings.json` — Claude Code hook
+- `~/.codex/mascota-codex-hook.ps1` + entries in `~/.codex/hooks.json` — Codex hook
 
-Both hooks connect to `127.0.0.1:8765` and auto-launch the app if it's not running.
-
-To reinstall hooks manually, open **Settings → Reinstall hooks** from the app.
+Both hooks send events to `127.0.0.1:8765` and start the tray app if it is not running. The Claude hook also resolves which `claude.exe` process owns the session (once per session), so the tray can follow it.
 
 ## Data
 
-User data is stored at `%USERPROFILE%\.mascota\mascota_data.json`.
+Everything lives under `%USERPROFILE%\.mascota\`:
 
-Legacy data from `.pixel-mascot` is automatically migrated on first launch.
+| Path | Content |
+|---|---|
+| `sessions\<session_id>.json` | Current state of each session (written by the hook) |
+| `sessions\<session_id>.title` | Resolved session name (written by the tray, read by the status line) |
+| `tray.json` | Tray settings (`sound`, `language`) |
+| `python.txt` | Python interpreter the hooks use to start the tray app |
 
-## Background visibility
-
-The toolbar includes a **BG** button that toggles the house scene (background, decorations, and floor) on or off:
-
-- **BG on** (button lit blue) — the full scene is visible behind the characters.
-- **BG off** (button dark) — only the characters float over your desktop; the scene is completely hidden.
-
-The characters are always rendered at 100% opacity regardless of this setting. When the background is off, clicks on that area pass through to whatever is underneath the app.
-
-Opening the **🏠 House editor** automatically enables the background so you can see the scene while editing.
-
-The last-used state is saved and restored on the next launch.
+`python.txt` matters when a virtual environment is active in your terminal: the hooks start the tray app with the interpreter that has `pystray` installed, not whatever `pythonw` comes first on `PATH`.
 
 ## Notes
 
-- Only one instance runs at a time (enforced via Windows mutex).
-- The app minimizes to a small window on startup; it does not use the system tray.
+- Only one instance runs at a time (enforced via a Windows mutex).
+- Session files are removed automatically when their Claude process exits.

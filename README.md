@@ -1,10 +1,10 @@
 <div align="center">
 
-<img src="assets/preview.gif" alt="Pixel Companion — Working, Idle, Waiting, Sleeping" />
+<img src="assets/tray-states.png" alt="Pixel Companion — Working, Waiting, Idle, Sleeping" />
 
 # pixel-companion
 
-**A pixel mascot that lives on your Windows desktop and reacts to your coding sessions.**
+**A pixel dino in your system tray that keeps track of every coding session you have open.**
 
 Works with **Claude Code** and **Codex** &nbsp;·&nbsp; **Windows only**
 
@@ -16,81 +16,58 @@ Works with **Claude Code** and **Codex** &nbsp;·&nbsp; **Windows only**
 
 ---
 
-Pixel Companion sits quietly on your screen while you work. When you send a prompt to Claude or Codex, Dino gets to work. When the agent is waiting for your approval, Dino waits too. When you step away, Dino falls asleep.
-
-It's not a productivity tool. It's a companion.
+Pixel Companion lives next to your clock. When you have several Claude or Codex sessions running, Dino shows you the one that needs you most, tells you which session is which, and takes you to the right terminal with one click. It stays out of the way: no windows on top of your work.
 
 ---
 
-## States
+## Where Dino shows up
 
-Dino switches states automatically based on what your session is doing.
+### In the system tray
 
-| State | When |
+One icon for all your sessions. Dino reflects the most urgent one:
+
+| Dino | Meaning |
 |---|---|
-| **Working** | Claude or Codex is actively running |
-| **Idle** | No active session |
-| **Waiting** | The agent is waiting for your approval |
-| **Sleeping** | You've been away for a while |
+| Running | At least one session is working |
+| **!** with an orange dot | A session is waiting for your approval (with a soft beep) |
+| Standing still | Sessions are ready for your next prompt |
+| Sleeping | Nothing has happened for a few minutes |
+| Grey | No active sessions |
+
+- **Left-click** — jumps to the terminal of the most urgent session, restoring it if it was minimized.
+- **Right-click** — lists every session by name and state, e.g. `campos-29-10 — needs your OK (Edit)`. Click one to bring its terminal to the front.
+
+### In each terminal's status line
+
+Every Claude Code terminal (Windows Terminal or VS Code) can show its own Dino:
+
+```
+🦖 campos-29-10 working (Bash) | Opus | my-project | ctx:12%
+```
+
+The name is the same one the tray menu uses, so you always know which terminal is which.
 
 ---
 
-## Scenes
+## Session names
 
-Six background scenes unlock as Dino levels up.
+Each session is labeled with the most specific name available:
 
-<table>
-  <tr>
-    <td align="center"><img src="assets/oficina.png" width="260" alt="Oficina" /><br/><sub>Office</sub></td>
-    <td align="center"><img src="assets/bosque.png" width="260" alt="Bosque" /><br/><sub>Forest</sub></td>
-    <td align="center"><img src="assets/montañas.png" width="260" alt="Montañas" /><br/><sub>Mountains</sub></td>
-  </tr>
-  <tr>
-    <td align="center"><img src="assets/noche.png" width="260" alt="Noche" /><br/><sub>Night</sub></td>
-    <td align="center"><img src="assets/playa.png" width="260" alt="Playa" /><br/><sub>Beach</sub></td>
-    <td align="center"><img src="assets/espacio.png" width="260" alt="Espacio" /><br/><sub>Space</sub></td>
-  </tr>
-</table>
+1. The name you gave the session in Claude Code
+2. The name it was launched with (`claude --remote-control <name>`)
+3. A `/rename`
+4. Claude's automatic session title (the one shown in `/resume`)
+5. The project folder, as a last resort
+
+Names refresh on their own, so renaming a session shows up within seconds.
 
 ---
 
-## Customization
+## Sessions follow their terminal
 
-<table>
-  <tr>
-    <td align="center"><img src="assets/personaje.png" width="380" alt="Character editor" /><br/><sub>Character editor — tint, outline, accessories, decorations</sub></td>
-    <td align="center"><img src="assets/alarma.png" width="380" alt="Alarms and breaks" /><br/><sub>Alarms and break reminders</sub></td>
-  </tr>
-</table>
+Each Dino is tied to the Claude process that owns the session. Close the terminal, kill the process or let it crash, and the session disappears from the tray within a few seconds. Sessions that are closed never pile up.
 
-- **Character** — tint color, outline, floating accessories (crown, star, halo, lightning, heart, note, zzz), draggable decorations
-- **Scene** — 10 grass color themes, 6 unlockable backgrounds
-- **BG toggle** — the toolbar **BG** button shows or hides the entire background scene; when off, only the characters float over your desktop
-- **Alarms** — named alarms with snooze, scheduled to the minute, daily or on chosen days of the month
-- **Breaks** — automatic reminders at a configurable interval and duration
-
----
-
-## Features
-
-**Companion**
-- Reacts in real time to Claude Code and Codex activity
-- Auto-installs the hooks on first launch — nothing to configure manually
-- Auto-launches when a hook event arrives, even if the app was closed
-- Compact window that stays out of your way
-
-**Productivity**
-- Break reminders with configurable interval and duration
-- Named alarms with snooze — every day, or only on the days of the month you pick (`1,15`)
-- Monthly alarms catch up: Dino only runs while you work, so an alarm for the 1st that you
-  missed fires the next time you open the app, not next month
-- XP system — Dino gains experience as you work and levels up over time
-
-**Mini-game**
-
-<img src="assets/juego.png" alt="Dino runner mini-game" width="600" />
-
-Unlocks when Dino levels up. Jump over obstacles, collect meters, beat your high score.
+Codex sessions have no process to follow, so they expire after two hours without activity.
 
 ---
 
@@ -100,7 +77,7 @@ Unlocks when Dino levels up. Jump over obstacles, collect meters, beat your high
 
 - Windows 10 or 11
 - Python 3.10 or later
-- [Claude Code](https://claude.ai/code) and/or [Codex](https://github.com/openai/codex) installed
+- [Claude Code](https://claude.ai/code) and/or [Codex](https://github.com/openai/codex)
 
 ### Run
 
@@ -108,46 +85,55 @@ Unlocks when Dino levels up. Jump over obstacles, collect meters, beat your high
 git clone https://github.com/Emi-Dz/pixel-companion.git
 cd pixel-companion/windows
 pip install -r ../requirements.txt
-python app.py
+pythonw tray.py
 ```
 
-On first launch, Pixel Companion installs the event hooks for Claude Code and Codex automatically, then minimizes to the side of your screen.
+On first launch Pixel Companion installs its hooks for Claude Code and Codex. From then on it starts by itself whenever a session sends an event, so you don't need to launch it by hand.
 
-> **Note:** You can add `windows/Iniciar Mascota.vbs` as a startup shortcut so Dino is always ready when you open your computer.
+> **Tip:** Windows 11 may place new tray icons in the overflow menu (`^`). Drag Dino next to the clock to keep it visible.
 
----
+### Status line (optional)
 
-## How It Works
+To get Dino in each terminal, point Claude Code's status line to the included script in `~/.claude/settings.json`:
 
-Pixel Companion listens on `127.0.0.1:8765` for local hook events. Both Claude Code and Codex call a small PowerShell script on every event, which forwards the payload to the app.
+```json
+"statusLine": {
+  "type": "command",
+  "command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"C:\\path\\to\\pixel-companion\\windows\\statusline.ps1\""
+}
+```
 
-### Claude Code hook
+If you already have a status line, copy the segment from `windows/statusline.ps1` into your own script.
 
-Installed automatically into `~/.claude/hooks/`. Fires on:
+### Start with Windows (optional)
 
-`UserPromptSubmit` · `PreToolUse` · `PostToolUse` · `PermissionRequest` · `PreCompact` · `Stop` · `SubagentStop` · `SessionEnd`
-
-### Codex hook
-
-Installed automatically into `~/.codex/hooks.json`. Fires on:
-
-`UserPromptSubmit` · `SessionStart` · `PreToolUse` · `PostToolUse` · `PermissionRequest` · `Stop`
-
-If the app is not running when a hook fires, the script auto-launches it and retries the connection.
+Add a shortcut to `windows/Iniciar Mascota.vbs` in your Startup folder (`Win + R` → `shell:startup`).
 
 ---
 
-## XP System
+## Settings
 
-Dino earns XP as you work:
+Right-click the tray icon to:
 
-| Event | XP |
-|---|---|
-| Tool completes (`PostToolUse` / `SubagentStop`) | +3 |
-| Session stops (`Stop`) | +3 |
-| Session ends (`SessionEnd`) | +2 |
+- Turn the approval beep on or off
+- Remove closed sessions right away
+- Quit
 
-Every 300 XP = 1 level. As Dino levels up, it literally grows — starting at half size (level 1) and reaching full size at level 20. Higher levels also unlock background scenes.
+The menu language (English / Spanish) is read from `language` in `%USERPROFILE%\.mascota\tray.json`.
+
+---
+
+## How it works
+
+Claude Code and Codex run a small PowerShell hook on every event. The hook:
+
+1. Writes the session's state to `%USERPROFILE%\.mascota\sessions\<session_id>.json`, which the status line reads
+2. Sends the event to the tray app on `127.0.0.1:8765`
+3. Starts the tray app if it is not running (only one copy ever runs)
+
+**Claude Code events:** `SessionStart` · `UserPromptSubmit` · `PreToolUse` · `PostToolUse` · `PermissionRequest` · `PreCompact` · `Stop` · `SubagentStop` · `SessionEnd`
+
+**Codex events:** `SessionStart` · `UserPromptSubmit` · `PreToolUse` · `PostToolUse` · `PermissionRequest` · `Stop`
 
 ---
 
@@ -156,15 +142,14 @@ Every 300 XP = 1 level. As Dino levels up, it literally grows — starting at ha
 ```
 pixel-companion/
 ├── windows/
-│   ├── app.py                        Main application
-│   ├── mascota-hook.ps1              Claude Code hook payload
-│   ├── codex-hook.ps1                Codex hook payload
-│   ├── Iniciar Mascota.vbs           Desktop shortcut helper
-│   ├── assets/sprites/Dino/          Dino sprite sheets (4 states)
-│   └── sounds/                       Sound effects
-├── scripts/
-│   └── generate_windows_media.py     Generates preview GIF from sprites
-├── assets/                           Screenshots and preview GIF
+│   ├── tray.py                   Tray app
+│   ├── mascota-hook.ps1          Claude Code hook (auto-installed)
+│   ├── codex-hook.ps1            Codex hook (auto-installed)
+│   ├── statusline.ps1            Status line segment for Claude Code
+│   ├── Iniciar Mascota.vbs       Startup shortcut helper
+│   ├── assets/sprites/Dino/      Dino sprite sheets (4 states)
+│   └── app.py                    Previous floating-window version (no longer launched)
+├── assets/                       README images
 ├── requirements.txt
 ├── UPSTREAM.md
 └── LICENSE

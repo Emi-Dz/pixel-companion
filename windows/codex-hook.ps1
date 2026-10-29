@@ -19,9 +19,19 @@ function Start-MascotaApp {
         return $false
     }
 
-    $appPath = Join-Path $appDir "app.py"
+    $appPath = Join-Path $appDir "tray.py"
     if (-not (Test-Path $appPath)) {
         return $false
+    }
+
+    # Interpreter recorded by the last successful tray run (has pystray installed).
+    $knownPython = Join-Path $env:USERPROFILE ".mascota\python.txt"
+    if (Test-Path $knownPython) {
+        $exe = (Get-Content $knownPython -Raw).Trim()
+        if ($exe -and (Test-Path $exe)) {
+            Start-Process -FilePath $exe -ArgumentList "`"$appPath`"" -WindowStyle Hidden | Out-Null
+            return $true
+        }
     }
 
     $candidates = @("pythonw", "pyw", "python", "py")
